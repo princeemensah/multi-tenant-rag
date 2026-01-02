@@ -34,12 +34,12 @@ logger = structlog.get_logger()
 
 
 @asynccontextmanager
-def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):
     """Handle startup and shutdown lifecycle events."""
     logger.info("Starting AI Operations Assistant backend")
     try:
         await init_db()
-        await create_tables()
+        create_tables()
         logger.info("Database initialized")
 
         vector_service = QdrantVectorService()
