@@ -13,6 +13,7 @@ from app.services.vector_service import QdrantVectorService
 from app.api import (
     agent_router,
     auth_router,
+    conversations_router,
     documents_router,
     incidents_router,
     queries_router,
@@ -167,6 +168,7 @@ app.include_router(documents_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(incidents_router, prefix="/api/v1")
 app.include_router(queries_router, prefix="/api/v1")
+app.include_router(conversations_router, prefix="/api/v1")
 app.include_router(tenants_router, prefix="/api/v1")
 
 

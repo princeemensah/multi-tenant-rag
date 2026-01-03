@@ -8,6 +8,8 @@ from .agent import (  # noqa: F401
 	AgentResponse,
 	AgentResult,
 	AgentToolResult,
+	AgentTrace,
+	AgentStrategy,
 	ContextSnippet as AgentContextSnippet,
 )
 from .auth import (  # noqa: F401
@@ -63,6 +65,8 @@ __all__ = [
 	"AgentResponse",
 	"AgentResult",
 	"AgentToolResult",
+	"AgentTrace",
+	"AgentStrategy",
 	"OrganizationSignup",
 	"OrganizationSignupResponse",
 	"TenantCreate",

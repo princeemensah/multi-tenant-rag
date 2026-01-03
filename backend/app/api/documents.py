@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, status
@@ -27,6 +27,7 @@ from app.schemas.document import (
     DocumentSearchRequest,
     DocumentSearchResponse,
     DocumentSearchResult,
+    DocumentUpload,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,11 +40,36 @@ def _parse_json_field(raw_value: Optional[str], default):
         return default
     try:
         parsed = json.loads(raw_value)
-        return parsed if parsed is not None else default
+        if parsed is None:
+            return default
+        if isinstance(default, dict) and not isinstance(parsed, dict):
+            raise ValueError
+        if isinstance(default, list) and not isinstance(parsed, list):
+            raise ValueError
+        return parsed
     except json.JSONDecodeError:
         if isinstance(default, list):
             return [item.strip() for item in raw_value.split(",") if item.strip()]
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload type")
+
+
+def _parse_upload_payload(raw_value: Optional[str]) -> Tuple[Optional[str], List[str], Dict[str, object]]:
+    if not raw_value:
+        return None, [], {}
+    try:
+        data = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid upload payload JSON") from exc
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Upload payload must be an object")
+
+    upload = DocumentUpload.model_validate(data)
+    tags = [tag.strip() for tag in upload.tags or [] if tag and tag.strip()]
+    metadata = upload.metadata or {}
+    return upload.title, tags, metadata
 
 
 @router.post("/upload", response_model=DocumentResponse)
@@ -57,17 +83,29 @@ async def upload_document(
     metadata: Optional[str] = Form(None),
     title: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
+    upload_payload: Optional[str] = Form(None),
 ):
+    payload_title, payload_tags, payload_metadata = _parse_upload_payload(upload_payload)
+
     parsed_metadata = _parse_json_field(metadata, {})
+    merged_metadata = {**parsed_metadata, **payload_metadata}
+
     parsed_tags = _parse_json_field(tags, [])
+    combined_tags: List[str] = []
+    for value in payload_tags + parsed_tags:
+        cleaned = value.strip()
+        if cleaned and cleaned not in combined_tags:
+            combined_tags.append(cleaned)
+
+    final_title = title or payload_title
 
     document = await document_service.upload_document(
         db=db,
         tenant_id=str(current_tenant.id),
         file=file,
-        metadata=parsed_metadata,
-        title=title,
-        tags=parsed_tags,
+        metadata=merged_metadata,
+        title=final_title,
+        tags=combined_tags,
     )
 
     background_tasks.add_task(

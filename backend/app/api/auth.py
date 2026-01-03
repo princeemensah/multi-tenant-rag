@@ -149,6 +149,11 @@ async def login_user(
 
     tenant = db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
 
+    logger.info(
+        "User login successful",
+        extra={"tenant_id": str(user.tenant_id), "email": user.email, "role": user.role},
+    )
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
@@ -266,6 +271,11 @@ async def refresh_token(
     )
 
     tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+
+    logger.info(
+        "Token refreshed",
+        extra={"tenant_id": str(current_user.tenant_id), "email": current_user.email},
+    )
 
     return TokenResponse(
         access_token=access_token,

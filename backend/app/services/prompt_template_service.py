@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
+from typing import Iterable, List, Optional
 
 
 class PromptTemplateService:
@@ -147,6 +148,17 @@ class PromptTemplateService:
         """
     ).strip()
 
+    CHAT_TITLE = dedent(
+        """
+        You are naming a conversational transcript. Use 3-6 words, Title Case, no punctuation at the end.
+
+        Transcript:
+        {transcript}
+
+        Title:
+        """
+    ).strip()
+
     @classmethod
     def get_format_instruction(cls, key: str) -> str:
         return cls.FORMAT_INSTRUCTIONS.get(key, "")
@@ -195,14 +207,80 @@ class PromptTemplateService:
         return cls.ACTION_PLANNING.format(query=query)
 
     @classmethod
-    def format_context(cls, contexts: list[dict[str, object]], *, limit: int = 3) -> str:
+    def chat_title_prompt(
+        cls,
+        messages: Iterable[dict[str, str] | object],
+        *,
+        limit: int = 12,
+    ) -> str:
+        if isinstance(messages, str):
+            recent = [{"role": "user", "content": messages}]
+        else:
+            recent = list(messages)[-limit:]
+        if not recent:
+            return cls.CHAT_TITLE.format(transcript="User: Conversation start")
+
+        lines: List[str] = []
+        for message in recent:
+            role = getattr(message, "role", None) or (
+                message.get("role") if isinstance(message, dict) else "user"
+            )
+            content = getattr(message, "content", None) or (
+                message.get("content") if isinstance(message, dict) else ""
+            )
+            content = str(content).strip()
+            if not content:
+                continue
+            lines.append(f"{role.capitalize()}: {content}")
+
+        transcript = "\n".join(lines) if lines else "User: Conversation start"
+        return cls.CHAT_TITLE.format(transcript=transcript)
+
+    @classmethod
+    def format_context(
+        cls,
+        contexts: Iterable[dict[str, object]],
+        *,
+        limit: int = 3,
+        max_length: Optional[int] = None,
+    ) -> str:
         sorted_contexts = sorted(contexts, key=lambda item: item.get("score", 0.0), reverse=True)[:limit]
-        parts: list[str] = []
+        parts: List[str] = []
         for index, ctx in enumerate(sorted_contexts, start=1):
             title = ctx.get("document_title") or ctx.get("source") or "Unknown"
             snippet = ctx.get("text") or ctx.get("content") or ""
             snippet = str(snippet).strip()
             if not snippet:
                 continue
+            if max_length and len(snippet) > max_length:
+                snippet = snippet[: max_length - 3].rstrip() + "..."
             parts.append(f"[Source {index}] {title}\n{snippet}")
         return "\n\n".join(parts)
+
+    @classmethod
+    def format_conversation(
+        cls,
+        conversation: Optional[Iterable[dict[str, str]]],
+        query: str,
+        *,
+        limit: int = 3,
+    ) -> str:
+        if not conversation:
+            return query
+
+        recent_messages = list(conversation)[-limit:]
+        lines: List[str] = ["Previous conversation:"]
+        for message in recent_messages:
+            role = message.get("role", "user")
+            if role == "system":
+                continue
+            content = message.get("content", "").strip()
+            if not content:
+                continue
+            lines.append(f"{role.capitalize()}: {content}")
+
+        if len(lines) == 1:
+            return query
+
+        transcript = "\n".join(lines)
+        return f"{transcript}\n\nConsidering the conversation above, answer this follow-up question: {query}"

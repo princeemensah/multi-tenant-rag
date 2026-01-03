@@ -11,7 +11,17 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.task import TaskPriority, TaskStatus
-from app.schemas.agent import AgentAction, AgentExecution, AgentIntent, AgentResult, AgentToolResult, ContextSnippet
+from app.schemas.agent import (
+    AgentAction,
+    AgentExecution,
+    AgentIntent,
+    AgentMessage,
+    AgentResult,
+    AgentStrategy,
+    AgentToolResult,
+    AgentTrace,
+    ContextSnippet,
+)
 from app.services.embedding_service import EmbeddingService
 from app.services.intent_service import IntentClassifier, IntentResult, IntentType
 from app.services.llm_service import LLMService
@@ -40,6 +50,17 @@ class AgentService:
         self.incident_service = incident_service or IncidentService()
         self.intent_classifier = IntentClassifier(self.llm_service)
 
+    def _apply_conversation_context(
+        self,
+        query: str,
+        conversation: Optional[List[AgentMessage]],
+    ) -> str:
+        if not conversation:
+            return query
+
+        serialized = [message.model_dump() for message in conversation]
+        return PromptTemplateService.format_conversation(serialized, query)
+
     async def execute(
         self,
         *,
@@ -49,11 +70,15 @@ class AgentService:
         query: str,
         llm_provider: Optional[str] = None,
         llm_model: Optional[str] = None,
+        conversation: Optional[List[AgentMessage]] = None,
+        strategy: AgentStrategy = AgentStrategy.DIRECT,
         max_chunks: int = 4,
         score_threshold: float = 0.35,
     ) -> AgentExecution:
+        processed_query = self._apply_conversation_context(query, conversation)
+
         intent = await self.intent_classifier.classify(
-            query,
+            processed_query,
             provider=llm_provider,
             model=llm_model,
         )
@@ -63,14 +88,14 @@ class AgentService:
                 db=db,
                 tenant_id=tenant_id,
                 user_id=user_id,
-                query=query,
+                query=processed_query,
                 intent=intent,
                 provider=llm_provider,
                 model=llm_model,
             )
             return AgentExecution(
                 intent=AgentIntent(**intent.model_dump()),
-                result=AgentResult(response="", contexts=[]),
+                result=AgentResult(response="", contexts=[], strategy=strategy, subqueries=[]),
                 action=action_result,
             )
 
@@ -80,17 +105,18 @@ class AgentService:
             )
             return AgentExecution(
                 intent=AgentIntent(**intent.model_dump()),
-                result=AgentResult(response=clarification, contexts=[]),
+                result=AgentResult(response=clarification, contexts=[], strategy=strategy, subqueries=[]),
                 action=None,
             )
 
         retrieval = await self._retrieve_information(
-            query=query,
+            query=processed_query,
             tenant_id=tenant_id,
             provider=llm_provider,
             model=llm_model,
             max_chunks=max_chunks,
             score_threshold=score_threshold,
+            strategy=strategy,
         )
         return AgentExecution(
             intent=AgentIntent(**intent.model_dump()),
@@ -107,22 +133,100 @@ class AgentService:
         model: Optional[str],
         max_chunks: int,
         score_threshold: float,
+        strategy: AgentStrategy,
     ) -> AgentResult:
-        subqueries = await self._generate_subqueries(query, provider, model)
+        effective_strategy = strategy
+        recorded_subqueries: List[str] = []
+        subqueries: List[str] = []
+
+        context_map: Dict[str, ContextSnippet] = {}
+        trace_map: Dict[str, Dict[str, ContextSnippet]] = {}
+
+        def ingest_contexts(items: List[ContextSnippet]) -> None:
+            for ctx in items:
+                key = f"{ctx.document_id}:{ctx.chunk_id}"
+                existing = context_map.get(key)
+                if not existing or ctx.score > existing.score:
+                    context_map[key] = ctx
+
+        def record_trace(label: str, items: List[ContextSnippet]) -> None:
+            if not items:
+                return
+            bucket = trace_map.setdefault(label, {})
+            for ctx in items:
+                key = f"{ctx.document_id}:{ctx.chunk_id}"
+                existing = bucket.get(key)
+                if not existing or ctx.score > existing.score:
+                    bucket[key] = ctx
+
+        initial_summary = ""
+        formatted_contexts = ""
+
+        if strategy == AgentStrategy.INFORMED:
+            initial_contexts = await self._search_context(query, tenant_id, max_chunks, score_threshold)
+            ingest_contexts(initial_contexts)
+            record_trace(f"Initial query: {query}", initial_contexts)
+            if initial_contexts:
+                recorded_subqueries.append(f"Initial query: {query}")
+                context_docs = [ctx.model_dump() for ctx in initial_contexts]
+                llm_initial = await self.llm_service.generate_rag_response(
+                    query=query,
+                    context_documents=context_docs,
+                    provider=provider,
+                    model=model,
+                    system_prompt=PromptTemplateService.get_system_message("rag"),
+                    temperature=0.0,
+                    max_tokens=400,
+                    stream=False,
+                )
+                initial_summary = llm_initial.content
+                formatted_contexts = PromptTemplateService.format_context(
+                    context_docs,
+                    limit=3,
+                    max_length=600,
+                )
+
+            subqueries = await self._generate_subqueries(
+                query,
+                provider,
+                model,
+                informed=True,
+                initial_summary=initial_summary,
+                context_snippets=formatted_contexts,
+            )
+
+        if not subqueries:
+            if effective_strategy == AgentStrategy.INFORMED and not context_map:
+                effective_strategy = AgentStrategy.DIRECT
+            subqueries = await self._generate_subqueries(query, provider, model)
+
         if not subqueries:
             subqueries = [query]
 
-        all_contexts: List[ContextSnippet] = []
+        if effective_strategy == AgentStrategy.DIRECT:
+            direct_contexts = await self._search_context(query, tenant_id, max_chunks, score_threshold)
+            ingest_contexts(direct_contexts)
+            record_trace(query, direct_contexts)
+
         for subquery in subqueries:
             contexts = await self._search_context(subquery, tenant_id, max_chunks, score_threshold)
-            all_contexts.extend(contexts)
+            ingest_contexts(contexts)
+            record_trace(subquery, contexts)
 
-        if not all_contexts:
+        aggregated_contexts = list(context_map.values())
+
+        if not aggregated_contexts:
             response = "No relevant documents were retrieved for this query."
-            return AgentResult(response=response, contexts=[])
+            return AgentResult(
+                response=response,
+                contexts=[],
+                subqueries=self._deduplicate_subqueries(recorded_subqueries + subqueries),
+                strategy=effective_strategy,
+                traces=self._build_traces(recorded_subqueries, subqueries, trace_map, query, effective_strategy),
+            )
 
         limit = max_chunks * max(1, len(subqueries))
-        trimmed_contexts = sorted(all_contexts, key=lambda item: item.score, reverse=True)[:limit]
+        trimmed_contexts = sorted(aggregated_contexts, key=lambda item: item.score, reverse=True)[:limit]
         context_docs = [context.model_dump() for context in trimmed_contexts]
         llm_response = await self.llm_service.generate_rag_response(
             query=query,
@@ -135,15 +239,75 @@ class AgentService:
             stream=False,
         )
 
-        return AgentResult(response=llm_response.content, contexts=trimmed_contexts, model_info=llm_response.model)
+        return AgentResult(
+            response=llm_response.content,
+            contexts=trimmed_contexts,
+            model_info=llm_response.model,
+            subqueries=self._deduplicate_subqueries(recorded_subqueries + subqueries),
+            strategy=effective_strategy,
+            traces=self._build_traces(recorded_subqueries, subqueries, trace_map, query, effective_strategy),
+        )
+
+    @staticmethod
+    def _deduplicate_subqueries(candidates: List[str]) -> List[str]:
+        ordered: List[str] = []
+        seen: Dict[str, bool] = {}
+        for candidate in candidates:
+            normalized = candidate.strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen[key] = True
+            ordered.append(normalized)
+        return ordered
+
+    @staticmethod
+    def _build_traces(
+        recorded_subqueries: List[str],
+        subqueries: List[str],
+        trace_map: Dict[str, Dict[str, ContextSnippet]],
+        original_query: str,
+        strategy: AgentStrategy,
+    ) -> List[AgentTrace]:
+        labels: List[str] = []
+        if strategy == AgentStrategy.DIRECT:
+            labels.append(original_query)
+        labels.extend(recorded_subqueries)
+        labels.extend(subqueries)
+
+        traces: List[AgentTrace] = []
+        seen_labels: Dict[str, bool] = {}
+        for label in labels:
+            normalized = label.strip()
+            if not normalized or normalized in seen_labels:
+                continue
+            seen_labels[normalized] = True
+            contexts_dict = trace_map.get(normalized, {})
+            contexts = list(contexts_dict.values()) if contexts_dict else []
+            traces.append(AgentTrace(subquery=normalized, contexts=contexts))
+        return traces
 
     async def _generate_subqueries(
         self,
         query: str,
         provider: Optional[str],
         model: Optional[str],
+        *,
+        informed: bool = False,
+        initial_summary: str = "",
+        context_snippets: str = "",
     ) -> List[str]:
-        prompt = PromptTemplateService.decomposition_prompt(query)
+        if informed:
+            prompt = PromptTemplateService.decomposition_prompt(
+                query,
+                informed=True,
+                initial_summary=initial_summary,
+                context_snippets=context_snippets,
+            )
+        else:
+            prompt = PromptTemplateService.decomposition_prompt(query)
         try:
             response = await self.llm_service.generate_text_response(
                 prompt=prompt,
@@ -347,5 +511,8 @@ class AgentService:
         ]
         payload = dict(summary)
         payload["recent_incidents"] = recent
-        return AgentToolResult(status="success", detail="Incident summary generated", data=payload)
-*** End Patch
+        return AgentToolResult(
+            status="success",
+            detail="Incident summary generated",
+            data=payload,
+        )

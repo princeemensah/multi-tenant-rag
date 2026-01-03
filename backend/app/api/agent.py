@@ -33,6 +33,8 @@ async def execute_agent(
         query=payload.query,
         llm_provider=payload.llm_provider or current_tenant.llm_provider,
         llm_model=payload.llm_model or current_tenant.llm_model,
+        conversation=payload.conversation,
+        strategy=payload.strategy,
         max_chunks=payload.max_chunks,
         score_threshold=payload.score_threshold,
     )

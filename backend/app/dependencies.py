@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.tenant import Tenant, TenantUser
 from app.services.auth_service import AuthService
 from app.services.agent_service import AgentService
+from app.services.conversation_service import ConversationService
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import LLMService
@@ -53,6 +54,10 @@ def get_incident_service() -> IncidentService:
 
 def get_agent_service() -> AgentService:
     return AgentService()
+
+
+def get_conversation_service() -> ConversationService:
+    return ConversationService()
 
 
 async def get_current_user(
@@ -171,6 +176,7 @@ EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
 AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
+ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
 
 CurrentUserDep = Annotated[TenantUser, Depends(get_current_active_user)]
 CurrentTenantDep = Annotated[Tenant, Depends(get_current_tenant)]

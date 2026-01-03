@@ -1,12 +1,20 @@
 """Pydantic models for agent orchestration endpoints."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.services.intent_service import IntentType
+
+
+class AgentStrategy(str, Enum):
+    """Supported orchestration strategies."""
+
+    DIRECT = "direct"
+    INFORMED = "informed"
 
 
 class ContextSnippet(BaseModel):
@@ -38,10 +46,18 @@ class AgentAction(BaseModel):
     result: AgentToolResult
 
 
+class AgentTrace(BaseModel):
+    subquery: str
+    contexts: List[ContextSnippet] = Field(default_factory=list)
+
+
 class AgentResult(BaseModel):
     response: str
     contexts: List[ContextSnippet]
     model_info: Optional[str] = None
+    subqueries: List[str] = Field(default_factory=list)
+    strategy: AgentStrategy = AgentStrategy.DIRECT
+    traces: List[AgentTrace] = Field(default_factory=list)
 
 
 class AgentExecution(BaseModel):
@@ -63,8 +79,8 @@ class AgentRequest(BaseModel):
     llm_model: Optional[str] = None
     session_id: Optional[UUID] = None
     conversation: Optional[List[AgentMessage]] = None
+    strategy: AgentStrategy = AgentStrategy.DIRECT
 
 
 class AgentResponse(BaseModel):
     execution: AgentExecution
-```}
