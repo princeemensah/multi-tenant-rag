@@ -7,7 +7,6 @@ dist/
 build/
 .eggs/
 .venv/
-.conda-env/
 venv/
 ENV/
 .env
