@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.tenant import Tenant, TenantUser
 from app.services.auth_service import AuthService
+from app.services.agent_service import AgentService
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import LLMService
+from app.services.task_service import IncidentService, TaskService
 from app.services.tenant_service import TenantService
 from app.services.vector_service import QdrantVectorService
 
@@ -39,6 +41,18 @@ def get_llm_service() -> LLMService:
 
 def get_embedding_service() -> EmbeddingService:
     return EmbeddingService()
+
+
+def get_task_service() -> TaskService:
+    return TaskService()
+
+
+def get_incident_service() -> IncidentService:
+    return IncidentService()
+
+
+def get_agent_service() -> AgentService:
+    return AgentService()
 
 
 async def get_current_user(
@@ -154,6 +168,9 @@ DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 VectorServiceDep = Annotated[QdrantVectorService, Depends(get_vector_service)]
 LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
 EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
+TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
+IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
+AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
 
 CurrentUserDep = Annotated[TenantUser, Depends(get_current_active_user)]
 CurrentTenantDep = Annotated[Tenant, Depends(get_current_tenant)]

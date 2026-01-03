@@ -1,6 +1,16 @@
 """Pydantic schema exports."""
 
-from .auth import (
+from .agent import (  # noqa: F401
+	AgentAction,
+	AgentExecution,
+	AgentIntent,
+	AgentRequest,
+	AgentResponse,
+	AgentResult,
+	AgentToolResult,
+	ContextSnippet as AgentContextSnippet,
+)
+from .auth import (  # noqa: F401
 	OrganizationSignup,
 	OrganizationSignupResponse,
 	TenantCreate,
@@ -12,18 +22,49 @@ from .auth import (
 	UserLogin,
 	UserResponse,
 )
-from .document import DocumentChunkResponse, DocumentCreate, DocumentResponse
-from .query import QueryHistoryEntry, QueryRequest, QueryResponseSchema
+from .document import (  # noqa: F401
+	DocumentChunkResponse,
+	DocumentList,
+	DocumentProcessResponse,
+	DocumentResponse,
+	DocumentSearchRequest,
+	DocumentSearchResponse,
+	DocumentSearchResult,
+)
+from .query import (  # noqa: F401
+	ContextDocument,
+	QueryAnalytics,
+	QueryFeedback,
+	QueryHistory,
+	QueryRequest,
+	QueryResponse,
+	QueryResponseData,
+	RAGRequest,
+	RAGResponse,
+)
+from .task import (  # noqa: F401
+	IncidentCreate,
+	IncidentList,
+	IncidentResponse,
+	IncidentSummary,
+	IncidentUpdate,
+	TaskCreate,
+	TaskList,
+	TaskResponse,
+	TaskUpdate,
+)
 
 __all__ = [
-	"DocumentChunkResponse",
-	"DocumentCreate",
-	"DocumentResponse",
+	"AgentAction",
+	"AgentContextSnippet",
+	"AgentExecution",
+	"AgentIntent",
+	"AgentRequest",
+	"AgentResponse",
+	"AgentResult",
+	"AgentToolResult",
 	"OrganizationSignup",
 	"OrganizationSignupResponse",
-	"QueryHistoryEntry",
-	"QueryRequest",
-	"QueryResponseSchema",
 	"TenantCreate",
 	"TenantResponse",
 	"TenantStats",
@@ -32,4 +73,29 @@ __all__ = [
 	"UserCreate",
 	"UserLogin",
 	"UserResponse",
+	"DocumentChunkResponse",
+	"DocumentList",
+	"DocumentProcessResponse",
+	"DocumentResponse",
+	"DocumentSearchRequest",
+	"DocumentSearchResponse",
+	"DocumentSearchResult",
+	"ContextDocument",
+	"QueryAnalytics",
+	"QueryFeedback",
+	"QueryHistory",
+	"QueryRequest",
+	"QueryResponse",
+	"QueryResponseData",
+	"RAGRequest",
+	"RAGResponse",
+	"IncidentCreate",
+	"IncidentList",
+	"IncidentResponse",
+	"IncidentSummary",
+	"IncidentUpdate",
+	"TaskCreate",
+	"TaskList",
+	"TaskResponse",
+	"TaskUpdate",
 ]

@@ -10,7 +10,15 @@ import structlog
 from app.config import settings
 from app.database import create_tables, init_db
 from app.services.vector_service import QdrantVectorService
-from app.api import auth_router, documents_router, queries_router, tenants_router
+from app.api import (
+    agent_router,
+    auth_router,
+    documents_router,
+    incidents_router,
+    queries_router,
+    tasks_router,
+    tenants_router,
+)
 
 structlog.configure(
     processors=[
@@ -154,7 +162,10 @@ async def detailed_health() -> dict:
 
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(agent_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
+app.include_router(tasks_router, prefix="/api/v1")
+app.include_router(incidents_router, prefix="/api/v1")
 app.include_router(queries_router, prefix="/api/v1")
 app.include_router(tenants_router, prefix="/api/v1")
 

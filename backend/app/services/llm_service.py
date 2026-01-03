@@ -266,6 +266,12 @@ class LLMService:
         self._initialize_providers()
         self.default_provider = settings.default_llm_provider or next(iter(self.providers))
 
+    def _resolve_model(self, provider: BaseProvider, requested: Optional[str]) -> str:
+        if requested:
+            return requested
+        options = provider.get_available_models()
+        return options[0] if options else "default"
+
     def _initialize_providers(self) -> None:
         if settings.openai_api_key:
             try:
@@ -334,7 +340,7 @@ class LLMService:
         llm_provider = self.get_provider(provider)
         messages = self.build_rag_messages(query, context_documents, system_prompt)
 
-        selected_model = model or (llm_provider.get_available_models()[0] if llm_provider.get_available_models() else "default")
+        selected_model = self._resolve_model(llm_provider, model)
 
         if stream:
             return llm_provider.generate_stream(
@@ -344,6 +350,30 @@ class LLMService:
                 max_tokens=max_tokens,
             )
 
+        return await llm_provider.generate_response(
+            messages,
+            model=selected_model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    async def generate_text_response(
+        self,
+        *,
+        prompt: str,
+        provider: Optional[str],
+        model: Optional[str],
+        system_prompt: Optional[str],
+        temperature: float = 0.2,
+        max_tokens: int = 400,
+    ) -> LLMResponse:
+        llm_provider = self.get_provider(provider)
+        messages: List[Dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        selected_model = self._resolve_model(llm_provider, model)
         return await llm_provider.generate_response(
             messages,
             model=selected_model,
