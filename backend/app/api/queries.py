@@ -1,9 +1,490 @@
-"""Query endpoints (placeholder)."""
-from fastapi import APIRouter, HTTPException
+"""Query and RAG endpoints."""
+from __future__ import annotations
+
+import json
+import logging
+import time
+from datetime import datetime, timedelta
+from typing import AsyncGenerator, Dict, List, Optional
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi.responses import StreamingResponse
+from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+from sqlalchemy import func
+
+from app.dependencies import (
+    CurrentTenantDep,
+    CurrentUserDep,
+    DatabaseDep,
+    EmbeddingServiceDep,
+    LLMServiceDep,
+    VectorServiceDep,
+)
+from app.models.query import Query, QueryResponse as QueryResponseModel
+from app.schemas.query import (
+    ContextDocument,
+    QueryAnalytics,
+    QueryFeedback,
+    QueryHistory,
+    QueryResponse,
+    RAGRequest,
+    RAGResponse,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/queries", tags=["Queries"])
 
 
-@router.get("/status")
-async def queries_status():
-    raise HTTPException(status_code=501, detail="Query endpoints not yet implemented")
+@router.get("/debug/vector-status")
+async def debug_vector_status(
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    vector_service: VectorServiceDep,
+):
+    try:
+        collection_ready = await vector_service.init_collection()
+        info = await vector_service.get_collection_info()
+
+        tenant_filter = Filter(
+            must=[FieldCondition(key="tenant_id", match=MatchValue(value=str(current_tenant.id)))]
+        )
+
+        scroll = await vector_service.async_client.scroll(  # type: ignore[attr-defined]
+            collection_name=vector_service.default_collection,
+            scroll_filter=tenant_filter,
+            limit=500,
+            with_payload=True,
+            with_vectors=False,
+        )
+        points = scroll[0] if scroll else []
+
+        sample = [
+            {
+                "id": item.id,
+                "document_id": item.payload.get("document_id") if item.payload else None,
+                "source": (item.payload or {}).get("source"),
+            }
+            for item in points[:5]
+        ]
+
+        return {
+            "collection_ready": collection_ready,
+            "collection_info": info,
+            "tenant_documents": len(points),
+            "sample": sample,
+        }
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        logger.error("Vector status probe failed", extra={"error": str(exc)})
+        return {
+            "collection_ready": False,
+            "collection_info": None,
+            "tenant_documents": 0,
+            "error": str(exc),
+        }
+
+
+@router.get("/debug/search-test")
+async def debug_search_test(
+    query: str = "test",
+    max_chunks: int = 5,
+    score_threshold: float = 0.3,
+    current_user: CurrentUserDep = None,
+    current_tenant: CurrentTenantDep = None,
+    vector_service: VectorServiceDep = None,
+    embedding_service: EmbeddingServiceDep = None,
+):
+    try:
+        query_embedding = await embedding_service.embed_text(query)  # type: ignore[union-attr]
+        results = await vector_service.search_documents(  # type: ignore[union-attr]
+            tenant_id=str(current_tenant.id),
+            query_embedding=query_embedding,
+            limit=max(1, max_chunks),
+            score_threshold=score_threshold,
+        )
+
+        return {
+            "query": query,
+            "embedding_dimension": len(query_embedding),
+            "results_found": len(results),
+            "scores": [item.get("score", 0.0) for item in results],
+            "sample": results[: min(len(results), 3)],
+        }
+    except Exception as exc:
+        logger.error("Search test failed", extra={"error": str(exc)})
+        return {
+            "query": query,
+            "embedding_dimension": 0,
+            "results_found": 0,
+            "error": str(exc),
+        }
+
+
+def _format_context_documents(results: List[Dict[str, object]]) -> List[ContextDocument]:
+    formatted: List[ContextDocument] = []
+    for result in results:
+        chunk_id = str(result.get("chunk_id") or result.get("id") or uuid4())
+        document_id = str(result.get("document_id") or uuid4())
+        source = str(result.get("source") or (result.get("metadata", {}) or {}).get("filename", "Unknown"))
+        metadata = result.get("metadata")
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {"raw": metadata}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        formatted.append(
+            ContextDocument(
+                chunk_id=chunk_id,
+                document_id=document_id,
+                score=float(result.get("score", 0.0)),
+                text=str(result.get("text", "")),
+                source=source,
+                page_number=result.get("page_number"),
+                chunk_index=int(result.get("chunk_index", 0)),
+                doc_metadata=metadata,
+            )
+        )
+    return formatted
+
+
+async def _record_failed_query(
+    db: DatabaseDep,
+    tenant_id: UUID,
+    user_id: UUID,
+    request_data: RAGRequest,
+    error: Exception,
+    elapsed_ms: float,
+) -> None:
+    failed = Query(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        query_text=request_data.query,
+        query_type="rag",
+        processing_time_ms=elapsed_ms,
+        status="failed",
+        query_metadata={"error": str(error), "request": request_data.model_dump(mode="json")},
+    )
+    db.add(failed)
+    db.commit()
+
+
+@router.post("/rag", response_model=RAGResponse)
+async def generate_rag_response(
+    rag_request: RAGRequest,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    vector_service: VectorServiceDep,
+    llm_service: LLMServiceDep,
+    embedding_service: EmbeddingServiceDep,
+):
+    start = time.perf_counter()
+    try:
+        query_embedding = await embedding_service.embed_text(rag_request.query)
+
+        filter_conditions: Dict[str, object] = {}
+        if rag_request.document_ids:
+            filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
+        if rag_request.tags:
+            filter_conditions["tags"] = rag_request.tags
+
+        search_results = await vector_service.search_documents(
+            tenant_id=str(current_tenant.id),
+            query_embedding=query_embedding,
+            limit=rag_request.max_chunks,
+            score_threshold=rag_request.score_threshold,
+            filter_conditions=filter_conditions or None,
+        )
+
+        context_documents = _format_context_documents(search_results)
+        context_text = "\n\n".join(doc.text for doc in context_documents)
+
+        provider = rag_request.llm_provider or current_tenant.llm_provider
+        model = rag_request.llm_model or current_tenant.llm_model
+
+        llm_response = await llm_service.generate_rag_response(
+            query=rag_request.query,
+            context_documents=[doc.model_dump() for doc in context_documents],
+            provider=provider,
+            model=model,
+            system_prompt=rag_request.system_prompt,
+            temperature=rag_request.temperature,
+            max_tokens=rag_request.max_tokens,
+            stream=False,
+        )
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+
+        retrieved_docs: List[UUID] = []
+        for doc in context_documents:
+            try:
+                retrieved_docs.append(UUID(doc.document_id))
+            except ValueError:
+                retrieved_docs.append(uuid4())
+
+        query_record = Query(
+            tenant_id=current_tenant.id,
+            user_id=current_user.id,
+            query_text=rag_request.query,
+            query_type="rag",
+            processing_time_ms=elapsed_ms,
+            status="completed",
+            retrieved_chunks_count=len(context_documents),
+            retrieved_documents=retrieved_docs,
+            similarity_threshold=rag_request.score_threshold,
+            llm_provider=provider,
+            llm_model=model,
+            input_tokens=llm_response.usage.get("prompt_tokens", 0),
+            output_tokens=llm_response.usage.get("completion_tokens", 0),
+            total_tokens=llm_response.usage.get("total_tokens", 0),
+            estimated_cost=llm_response.metadata.get("estimated_cost", 0.0),
+            session_id=rag_request.session_id,
+            conversation_turn=rag_request.conversation_turn,
+            query_metadata={"rag_request": rag_request.model_dump(mode="json")},
+        )
+        db.add(query_record)
+        db.commit()
+        db.refresh(query_record)
+
+        response_record = QueryResponseModel(
+            query_id=query_record.id,
+            response_text=llm_response.content,
+            response_format="text",
+            context_used=context_text,
+            context_chunks=[doc.chunk_id for doc in context_documents],
+            confidence_score=None,
+            source_attribution=[doc.source for doc in context_documents],
+            contains_citations=False,
+            fact_checked=False,
+            is_cached=llm_response.metadata.get("cache_hit", False),
+            cache_hit=llm_response.metadata.get("cache_hit", False),
+        )
+        db.add(response_record)
+        db.commit()
+
+        background_tasks.add_task(db.expunge, response_record)
+
+        return RAGResponse(
+            query_id=query_record.id,
+            query=rag_request.query,
+            response=llm_response.content,
+            context_documents=context_documents,
+            context_used=context_text,
+            processing_time_ms=elapsed_ms,
+            llm_provider=provider,
+            llm_model=model,
+            input_tokens=llm_response.usage.get("prompt_tokens", 0),
+            output_tokens=llm_response.usage.get("completion_tokens", 0),
+            total_tokens=llm_response.usage.get("total_tokens", 0),
+            estimated_cost=llm_response.metadata.get("estimated_cost", 0.0),
+            confidence_score=None,
+            source_attribution=list({doc.source for doc in context_documents}),
+            contains_citations=False,
+            session_id=rag_request.session_id,
+            conversation_turn=rag_request.conversation_turn,
+            created_at=query_record.created_at,
+        )
+    except Exception as exc:
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        logger.error("RAG query failed", extra={"error": str(exc)})
+        try:
+            await _record_failed_query(db, current_tenant.id, current_user.id, rag_request, exc, elapsed_ms)
+        except Exception:  # pragma: no cover - defensive
+            db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="RAG query failed")
+
+
+@router.post("/rag/stream")
+async def generate_rag_response_stream(
+    rag_request: RAGRequest,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    vector_service: VectorServiceDep,
+    llm_service: LLMServiceDep,
+    embedding_service: EmbeddingServiceDep,
+):
+    try:
+        query_embedding = await embedding_service.embed_text(rag_request.query)
+        search_results = await vector_service.search_documents(
+            tenant_id=str(current_tenant.id),
+            query_embedding=query_embedding,
+            limit=rag_request.max_chunks,
+            score_threshold=rag_request.score_threshold,
+        )
+
+        context_documents = [doc.model_dump() for doc in _format_context_documents(search_results)]
+
+        provider = rag_request.llm_provider or current_tenant.llm_provider
+        model = rag_request.llm_model or current_tenant.llm_model
+
+        stream = await llm_service.generate_rag_response(
+            query=rag_request.query,
+            context_documents=context_documents,
+            provider=provider,
+            model=model,
+            system_prompt=rag_request.system_prompt,
+            temperature=rag_request.temperature,
+            max_tokens=rag_request.max_tokens,
+            stream=True,
+        )
+
+        async def iterator() -> AsyncGenerator[str, None]:
+            try:
+                async for chunk in stream:
+                    yield f"data: {chunk}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as exc:  # pragma: no cover - streaming best-effort
+                logger.error("Streaming RAG failed", extra={"error": str(exc)})
+                yield f"data: [ERROR: {str(exc)}]\n\n"
+
+        return StreamingResponse(
+            iterator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            },
+        )
+    except Exception as exc:
+        logger.error("Unable to start streaming response", extra={"error": str(exc)})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Streaming RAG query failed")
+
+
+@router.get("/history", response_model=QueryHistory)
+async def get_query_history(
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    skip: int = 0,
+    limit: int = 20,
+    session_id: Optional[str] = None,
+):
+    try:
+        query = (
+            db.query(Query)
+            .filter(Query.tenant_id == current_tenant.id, Query.user_id == current_user.id)
+            .order_by(Query.created_at.desc())
+        )
+        if session_id:
+            query = query.filter(Query.session_id == session_id)
+
+        total = query.count()
+        page = max(1, skip // max(limit, 1) + 1)
+        size = max(limit, 1)
+        items = query.offset(max(skip, 0)).limit(size).all()
+
+        return QueryHistory(queries=items, total=total, page=page, size=size, pages=(total + size - 1) // size)
+    except Exception as exc:
+        logger.error("Failed to fetch query history", extra={"error": str(exc)})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query history")
+
+
+@router.get("/{query_id}", response_model=QueryResponse)
+async def get_query(
+    query_id: UUID,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+):
+    record = (
+        db.query(Query)
+        .filter(Query.id == query_id, Query.tenant_id == current_tenant.id, Query.user_id == current_user.id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Query not found")
+    return record
+
+
+@router.post("/{query_id}/feedback")
+async def submit_query_feedback(
+    query_id: UUID,
+    feedback: QueryFeedback,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+):
+    record = (
+        db.query(Query)
+        .filter(Query.id == query_id, Query.tenant_id == current_tenant.id, Query.user_id == current_user.id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Query not found")
+
+    record.user_rating = feedback.rating
+    record.feedback = feedback.feedback
+    db.commit()
+    logger.info("Query feedback submitted", extra={"query_id": str(query_id), "user": current_user.email})
+    return {"message": "Feedback submitted"}
+
+
+@router.get("/analytics/summary", response_model=QueryAnalytics)
+async def get_query_analytics(
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    days: int = 30,
+):
+    try:
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=max(days, 1))
+        today_start = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        base_query = db.query(Query).filter(
+            Query.tenant_id == current_tenant.id,
+            Query.created_at >= start_date,
+            Query.created_at <= end_date,
+        )
+
+        total_queries = base_query.count()
+        queries_today = db.query(Query).filter(Query.tenant_id == current_tenant.id, Query.created_at >= today_start).count()
+        avg_processing_time = (
+            base_query.filter(Query.processing_time_ms.isnot(None))
+            .with_entities(func.avg(Query.processing_time_ms))
+            .scalar()
+            or 0.0
+        )
+        avg_tokens = (
+            base_query.filter(Query.total_tokens > 0)
+            .with_entities(func.avg(Query.total_tokens))
+            .scalar()
+            or 0.0
+        )
+        total_cost = base_query.with_entities(func.sum(Query.estimated_cost)).scalar() or 0.0
+
+        type_counts = (
+            db.query(Query.query_type, func.count(Query.id))
+            .filter(Query.tenant_id == current_tenant.id, Query.created_at >= start_date)
+            .group_by(Query.query_type)
+            .all()
+        )
+        top_query_types = [{"type": query_type, "count": count} for query_type, count in type_counts]
+
+        avg_rating = (
+            base_query.filter(Query.user_rating.isnot(None))
+            .with_entities(func.avg(Query.user_rating))
+            .scalar()
+        )
+
+        return QueryAnalytics(
+            tenant_id=current_tenant.id,
+            total_queries=total_queries,
+            queries_today=queries_today,
+            avg_processing_time_ms=float(avg_processing_time),
+            avg_tokens_per_query=float(avg_tokens),
+            total_cost=float(total_cost),
+            top_query_types=top_query_types,
+            avg_rating=float(avg_rating) if avg_rating is not None else None,
+            period_start=start_date,
+            period_end=end_date,
+        )
+    except Exception as exc:
+        logger.error("Failed to compute query analytics", extra={"error": str(exc)})
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query analytics")
