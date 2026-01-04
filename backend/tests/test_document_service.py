@@ -1,5 +1,6 @@
 from __future__ import annotations
 import io
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -7,7 +8,7 @@ from fastapi import UploadFile
 from starlette.datastructures import Headers
 
 from app.config import settings
-from app.models.document import DocumentChunk
+from app.models.document import Document, DocumentChunk
 from app.models.tenant import Tenant
 from app.services.document_service import DocumentService
 
@@ -166,3 +167,108 @@ async def test_process_document_handles_empty_text(tmp_path, db_session, monkeyp
     assert (document.status, document.total_chunks) == ("failed", 0)
     assert db_session.query(DocumentChunk).filter_by(document_id=document.id).count() == 0
     assert vector_stub.add_calls == []
+
+
+def test_select_documents_for_reprocessing_orders_and_reports_missing(tmp_path, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    service = DocumentService()
+
+    tenant = Tenant(name="Batch", subdomain="batch")
+    db_session.add(tenant)
+    db_session.commit()
+
+    other_tenant = Tenant(name="Other", subdomain="other")
+    db_session.add(other_tenant)
+    db_session.commit()
+
+    now = datetime.now(UTC)
+    doc_uploaded = Document(
+        tenant_id=tenant.id,
+        filename="uploaded.txt",
+        original_filename="uploaded.txt",
+        content_type="text/plain",
+        file_size=10,
+        file_path="/tmp/uploaded.txt",
+        status="uploaded",
+        total_chunks=0,
+        processed_chunks=0,
+        title="Uploaded",
+        summary=None,
+        language="en",
+        word_count=0,
+        collection_name=None,
+        embedding_model=None,
+        doc_metadata={},
+        tags=["ops"],
+        uploaded_at=now,
+        processed_at=None,
+        created_at=now,
+    )
+
+    doc_processed = Document(
+        tenant_id=tenant.id,
+        filename="processed.txt",
+        original_filename="processed.txt",
+        content_type="text/plain",
+        file_size=12,
+        file_path="/tmp/processed.txt",
+        status="processed",
+        total_chunks=2,
+        processed_chunks=2,
+        title="Processed",
+        summary=None,
+        language="en",
+        word_count=20,
+        collection_name=None,
+        embedding_model=None,
+        doc_metadata={},
+        tags=["ops"],
+        uploaded_at=now,
+        processed_at=now,
+        created_at=now,
+    )
+
+    doc_other = Document(
+        tenant_id=other_tenant.id,
+        filename="other.txt",
+        original_filename="other.txt",
+        content_type="text/plain",
+        file_size=8,
+        file_path="/tmp/other.txt",
+        status="uploaded",
+        total_chunks=0,
+        processed_chunks=0,
+        title="Other",
+        summary=None,
+        language="en",
+        word_count=0,
+        collection_name=None,
+        embedding_model=None,
+        doc_metadata={},
+        tags=[],
+        uploaded_at=now,
+        processed_at=None,
+        created_at=now,
+    )
+
+    db_session.add_all([doc_uploaded, doc_processed, doc_other])
+    db_session.commit()
+
+    missing_uuid = uuid.uuid4()
+    documents, missing = service.select_documents_for_reprocessing(
+        db=db_session,
+        tenant_id=str(tenant.id),
+        document_ids=[str(doc_processed.id), str(doc_uploaded.id), str(missing_uuid)],
+    )
+
+    assert [doc.id for doc in documents] == [doc_processed.id, doc_uploaded.id]
+    assert missing == [missing_uuid]
+
+    filtered_docs, _ = service.select_documents_for_reprocessing(
+        db=db_session,
+        tenant_id=str(tenant.id),
+        status_filter="uploaded",
+        limit=1,
+    )
+    assert len(filtered_docs) == 1
+    assert filtered_docs[0].status == "uploaded"

@@ -40,6 +40,10 @@ Populate a `.env` file (or export environment variables) with the following chun
 
 The backend reads these values via Settings in [backend/app/config.py](backend/app/config.py), allowing you to widen or shrink chunk sizing without code changes.
 
+## Operations
+
+- Reprocess stored documents by calling POST /api/v1/documents/reprocess with the payload defined in [backend/app/schemas/document.py](backend/app/schemas/document.py#L120-L151). The endpoint accepts explicit document_ids or filtering parameters and queues background processing for matching records.
+
 ## Agent Layer Overview
 
 - **Endpoint**: `POST /api/v1/agent/execute`
