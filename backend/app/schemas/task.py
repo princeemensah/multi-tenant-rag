@@ -125,5 +125,3 @@ class IncidentSummary(BaseModel):
     incidents_by_severity: dict
     incidents_by_status: dict
     recent_incidents: List[IncidentResponse]
-
-```}

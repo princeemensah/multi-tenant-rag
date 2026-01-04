@@ -1,7 +1,6 @@
 """Conversation persistence and retrieval utilities."""
 from __future__ import annotations
 
-import logging
 from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
@@ -13,7 +12,10 @@ from app.models.conversation import ConversationMessage, ConversationSession
 from app.services.llm_service import LLMService
 from app.services.prompt_template_service import PromptTemplateService
 
-logger = logging.getLogger(__name__)
+import structlog
+
+
+logger = structlog.get_logger(__name__)
 
 
 class ConversationService:
@@ -81,7 +83,7 @@ class ConversationService:
         db.add(session)
         db.commit()
         db.refresh(session)
-        logger.info("Conversation session created", extra={"session_id": str(session.id), "tenant": str(tenant_id)})
+        logger.info("Conversation session created", session_id=str(session.id), tenant=str(tenant_id))
         return session
 
     def rename_session(
@@ -107,7 +109,7 @@ class ConversationService:
         session = self._require_session(db, tenant_id, session_id)
         db.delete(session)
         db.commit()
-        logger.info("Conversation session deleted", extra={"session_id": str(session_id), "tenant": str(tenant_id)})
+        logger.info("Conversation session deleted", session_id=str(session_id), tenant=str(tenant_id))
 
     # ------------------------------------------------------------------
     # Message operations
@@ -141,7 +143,9 @@ class ConversationService:
         db.refresh(session)
         logger.debug(
             "Conversation message stored",
-            extra={"session_id": str(session_id), "message_id": str(message.id), "sequence": next_sequence},
+            session_id=str(session_id),
+            message_id=str(message.id),
+            sequence=next_sequence,
         )
         return message
 

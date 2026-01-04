@@ -24,11 +24,17 @@ from app.schemas.conversation import (
     ConversationSessionResponse,
 )
 
+import structlog
+
+
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
 @router.get("/", response_model=ConversationSessionList)
 def list_conversation_sessions(
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -36,6 +42,14 @@ def list_conversation_sessions(
     limit: int = 20,
 ) -> ConversationSessionList:
     sessions, total = conversation_service.list_sessions(db, current_tenant.id, limit=limit, skip=skip)
+    logger.info(
+        "List conversation sessions",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        skip=skip,
+        limit=limit,
+        total=total,
+    )
     size = max(limit, 1)
     page = max(skip // size + 1, 1)
     pages = ceil(total / size) if total else 1
@@ -56,12 +70,19 @@ def create_conversation_session(
         created_by_id=current_user.id,
         title=payload.title,
     )
+    logger.info(
+        "Conversation session created",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session.id),
+    )
     return session
 
 
 @router.get("/{session_id}", response_model=ConversationSessionResponse)
 def get_conversation_session(
     session_id: UUID,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -69,6 +90,12 @@ def get_conversation_session(
     session = conversation_service.get_session(db, current_tenant.id, session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation session not found")
+    logger.info(
+        "Get conversation session",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+    )
     return session
 
 
@@ -76,6 +103,7 @@ def get_conversation_session(
 def rename_conversation_session(
     session_id: UUID,
     payload: ConversationSessionRename,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -86,22 +114,37 @@ def rename_conversation_session(
         session_id,
         title=payload.title,
     )
+    logger.info(
+        "Conversation session renamed",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+    )
     return session
 
 
-@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{session_id}", status_code=status.HTTP_200_OK)
 def delete_conversation_session(
     session_id: UUID,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
 ) -> None:
     conversation_service.delete_session(db, current_tenant.id, session_id)
+    logger.info(
+        "Conversation session deleted",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+    )
+    return {"message": "Conversation session deleted"}
 
 
 @router.get("/{session_id}/messages", response_model=ConversationMessageList)
 def list_conversation_messages(
     session_id: UUID,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -127,6 +170,14 @@ def list_conversation_messages(
         remaining = max(earliest_sequence - 1, 0)
         next_before = earliest_sequence
 
+    logger.info(
+        "Conversation messages listed",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+        limit=limit,
+        remaining=remaining,
+    )
     return ConversationMessageList(
         session_id=session_id,
         messages=messages,
@@ -154,12 +205,20 @@ def create_conversation_message(
         author_id=author_id,
         metadata=payload.metadata or {},
     )
+    logger.info(
+        "Conversation message created",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+        role=payload.role,
+    )
     return message
 
 
 @router.get("/{session_id}/context", response_model=ConversationContextResponse)
 def get_conversation_context(
     session_id: UUID,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -171,12 +230,21 @@ def get_conversation_context(
 
     # Obtain context as list of role/content pairs for downstream LLM use.
     context_messages = conversation_service.get_context(db, current_tenant.id, session_id, limit=limit)
+    logger.info(
+        "Conversation context retrieved",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+        limit=limit,
+        messages=len(context_messages),
+    )
     return ConversationContextResponse(session_id=session_id, messages=context_messages)
 
 
 @router.post("/{session_id}/title/generate")
 async def generate_conversation_title(
     session_id: UUID,
+    current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
@@ -184,6 +252,10 @@ async def generate_conversation_title(
     title = await conversation_service.generate_title(db, current_tenant.id, session_id)
     if not title:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to generate title")
+    logger.info(
+        "Conversation title generated",
+        tenant=str(current_tenant.id),
+        user=str(current_user.id),
+        session_id=str(session_id),
+    )
     return {"title": title}
-
-```

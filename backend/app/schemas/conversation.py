@@ -87,5 +87,3 @@ class ConversationContextResponse(BaseModel):
 
     session_id: UUID
     messages: List[Dict[str, str]]
-
-```}
