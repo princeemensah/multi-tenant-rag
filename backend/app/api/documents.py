@@ -21,6 +21,9 @@ from app.dependencies import (
 )
 from app.models.document import Document, DocumentChunk
 from app.schemas.document import (
+    DocumentBatchProcessItem,
+    DocumentBatchProcessRequest,
+    DocumentBatchProcessResponse,
     DocumentChunkResponse,
     DocumentList,
     DocumentProcessResponse,
@@ -198,6 +201,91 @@ async def process_document(
         document_id=document.id,
         status="processing",
         message="Document processing started",
+    )
+
+
+@router.post("/reprocess", response_model=DocumentBatchProcessResponse)
+async def reprocess_documents(
+    batch_request: DocumentBatchProcessRequest,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    document_service: DocumentServiceDep,
+):
+    tenant_id = str(current_tenant.id)
+    requested_ids = [str(value) for value in batch_request.document_ids] if batch_request.document_ids else []
+
+    documents, missing = document_service.select_documents_for_reprocessing(
+        db=db,
+        tenant_id=tenant_id,
+        document_ids=requested_ids or None,
+        status_filter=batch_request.status,
+        limit=batch_request.limit,
+    )
+
+    matched = len(documents)
+    requested = len(requested_ids) if requested_ids else matched
+
+    results: List[DocumentBatchProcessItem] = []
+    scheduled = 0
+    skipped = 0
+
+    for document in documents:
+        if document.status == "processed" and not batch_request.force:
+            skipped += 1
+            results.append(
+                DocumentBatchProcessItem(
+                    document_id=document.id,
+                    action="skipped",
+                    message="Document already processed; set force=true to reprocess.",
+                )
+            )
+            continue
+
+        background_tasks.add_task(
+            document_service.process_document,
+            db=db,
+            document_id=str(document.id),
+            tenant_id=tenant_id,
+        )
+        scheduled += 1
+        results.append(
+            DocumentBatchProcessItem(
+                document_id=document.id,
+                action="queued",
+                message="Document scheduled for background processing",
+            )
+        )
+
+    for missing_id in missing:
+        results.append(
+            DocumentBatchProcessItem(
+                document_id=missing_id,
+                action="missing",
+                message="Document not found for tenant",
+            )
+        )
+
+    logger.info(
+        "Batch reprocess requested",
+        extra={
+            "tenant": tenant_id,
+            "scheduled": scheduled,
+            "skipped": skipped,
+            "requested": requested,
+            "missing": [str(value) for value in missing],
+            "user": current_user.email,
+        },
+    )
+
+    return DocumentBatchProcessResponse(
+        requested=requested,
+        matched=matched,
+        scheduled=scheduled,
+        skipped=skipped,
+        missing=missing,
+        results=results,
     )
 
 

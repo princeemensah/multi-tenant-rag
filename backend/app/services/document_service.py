@@ -269,6 +269,59 @@ class DocumentService:
             query = query.filter(Document.status == status_filter)
         return query.offset(skip).limit(limit).all()
 
+    def select_documents_for_reprocessing(
+        self,
+        db: Session,
+        tenant_id: str,
+        *,
+        document_ids: Optional[List[str]] = None,
+        status_filter: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> tuple[List[Document], List[uuid.UUID]]:
+        """Return candidate documents plus any missing identifiers.
+
+        The returned list respects the order of ``document_ids`` when provided so
+        operators can predict processing order. ``missing`` contains any
+        requested IDs that do not exist for the tenant, allowing the caller to
+        surface actionable feedback without failing the entire request.
+        """
+
+        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
+        query = db.query(Document).filter(Document.tenant_id == tenant_uuid)
+
+        ordered_ids: List[uuid.UUID] = []
+        missing_ids: List[uuid.UUID] = []
+
+        if document_ids:
+            seen: set[uuid.UUID] = set()
+            for raw_id in document_ids:
+                doc_uuid = self._coerce_uuid(raw_id)
+                if doc_uuid is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document_id provided")
+                if doc_uuid not in seen:
+                    ordered_ids.append(doc_uuid)
+                    seen.add(doc_uuid)
+
+            if ordered_ids:
+                query = query.filter(Document.id.in_(ordered_ids))
+
+        if status_filter:
+            query = query.filter(Document.status == status_filter)
+
+        query = query.order_by(Document.uploaded_at.asc())
+
+        if limit and limit > 0 and not ordered_ids:
+            query = query.limit(limit)
+
+        documents: List[Document] = query.all()
+
+        if ordered_ids:
+            found_map = {doc.id: doc for doc in documents}
+            documents = [found_map[doc_id] for doc_id in ordered_ids if doc_id in found_map]
+            missing_ids = [doc_id for doc_id in ordered_ids if doc_id not in found_map]
+
+        return documents, missing_ids
+
     def update_document_status(self, db: Session, document_id: str, status_value: str) -> Document:
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:

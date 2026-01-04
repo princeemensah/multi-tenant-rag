@@ -19,6 +19,9 @@ class _StubDocumentService:
         self.upload_kwargs: Dict[str, Any] | None = None
         self.process_calls: List[Dict[str, str]] = []
         self._document: Optional[Document] = None
+        self.reprocess_candidates: List[Document] = []
+        self.reprocess_missing: List[UUID] = []
+        self.last_reprocess_query: Dict[str, Any] | None = None
 
     @property
     def document(self) -> Document:
@@ -76,6 +79,23 @@ class _StubDocumentService:
     async def process_document(self, db, document_id: str, tenant_id: str) -> bool:
         self.process_calls.append({"document_id": document_id, "tenant_id": tenant_id})
         return True
+
+    def select_documents_for_reprocessing(
+        self,
+        db,
+        tenant_id: str,
+        *,
+        document_ids: Optional[List[str]] = None,
+        status_filter: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> tuple[List[Document], List[UUID]]:
+        self.last_reprocess_query = {
+            "tenant_id": tenant_id,
+            "document_ids": document_ids,
+            "status_filter": status_filter,
+            "limit": limit,
+        }
+        return list(self.reprocess_candidates), list(self.reprocess_missing)
 
 
 @pytest.mark.usefixtures("client")
@@ -136,6 +156,121 @@ def test_upload_document_merges_payload_and_schedules_processing(client, db_sess
         assert stub_service.process_calls == [
             {"document_id": str(stub_service.document.id), "tenant_id": str(tenant.id)}
         ]
+    finally:
+        client.app.dependency_overrides.pop(get_document_service, None)
+        client.app.dependency_overrides.pop(get_current_user, None)
+        client.app.dependency_overrides.pop(get_current_tenant, None)
+
+
+@pytest.mark.usefixtures("client")
+def test_reprocess_documents_endpoint_schedules_expected_candidates(client, db_session):
+    stub_service = _StubDocumentService()
+    client.app.dependency_overrides[get_document_service] = lambda: stub_service
+
+    try:
+        tenant = Tenant(name="Acme Corp", subdomain="acme")
+        db_session.add(tenant)
+        db_session.commit()
+
+        user = TenantUser(
+            tenant_id=tenant.id,
+            email="admin@acme.io",
+            username="acme-admin",
+            hashed_password="hashed",
+            role="admin",
+            is_active=True,
+        )
+        db_session.add(user)
+        db_session.commit()
+
+        client.app.dependency_overrides[get_current_user] = lambda: user
+        client.app.dependency_overrides[get_current_tenant] = lambda: tenant
+
+        now = datetime.now(UTC)
+        processed = Document(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            filename="processed.txt",
+            original_filename="processed.txt",
+            content_type="text/plain",
+            file_size=12,
+            file_path="/tmp/processed.txt",
+            status="processed",
+            total_chunks=2,
+            processed_chunks=2,
+            title="Processed",
+            summary=None,
+            language="en",
+            word_count=20,
+            collection_name=None,
+            embedding_model=None,
+            doc_metadata={},
+            tags=["ops"],
+            uploaded_at=now,
+            processed_at=now,
+            created_at=now,
+        )
+
+        uploaded = Document(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            filename="uploaded.txt",
+            original_filename="uploaded.txt",
+            content_type="text/plain",
+            file_size=10,
+            file_path="/tmp/uploaded.txt",
+            status="uploaded",
+            total_chunks=0,
+            processed_chunks=0,
+            title="Uploaded",
+            summary=None,
+            language="en",
+            word_count=0,
+            collection_name=None,
+            embedding_model=None,
+            doc_metadata={},
+            tags=["ops"],
+            uploaded_at=now,
+            processed_at=None,
+            created_at=now,
+        )
+
+        missing_id = uuid4()
+        stub_service.reprocess_candidates = [processed, uploaded]
+        stub_service.reprocess_missing = [missing_id]
+
+        payload = {
+            "document_ids": [str(processed.id), str(uploaded.id), str(missing_id)],
+        }
+
+        response = client.post(
+            "/api/v1/documents/reprocess",
+            json=payload,
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["requested"] == 3
+        assert body["matched"] == 2
+        assert body["scheduled"] == 1
+        assert body["skipped"] == 1
+        assert str(missing_id) in [entry for entry in body["missing"]]
+
+        actions = {item["document_id"]: item["action"] for item in body["results"]}
+        assert actions[str(uploaded.id)] == "queued"
+        assert actions[str(processed.id)] == "skipped"
+        assert actions[str(missing_id)] == "missing"
+
+        assert stub_service.process_calls == [
+            {"document_id": str(uploaded.id), "tenant_id": str(tenant.id)}
+        ]
+
+        assert stub_service.last_reprocess_query == {
+            "tenant_id": str(tenant.id),
+            "document_ids": [str(processed.id), str(uploaded.id), str(missing_id)],
+            "status_filter": None,
+            "limit": None,
+        }
     finally:
         client.app.dependency_overrides.pop(get_document_service, None)
         client.app.dependency_overrides.pop(get_current_user, None)

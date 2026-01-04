@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocumentUpload(BaseModel):
@@ -115,4 +115,38 @@ class DocumentSearchResponse(BaseModel):
     results: List[DocumentSearchResult]
     total_found: int
     search_time_ms: float
+
+
+class DocumentBatchProcessRequest(BaseModel):
+    """Batch trigger payload for document reprocessing."""
+
+    document_ids: Optional[List[UUID]] = None
+    status: Optional[str] = Field(default=None, max_length=64)
+    limit: Optional[int] = Field(default=None, ge=1, le=500)
+    force: bool = False
+
+    @model_validator(mode="after")
+    def ensure_scope(cls, values: "DocumentBatchProcessRequest") -> "DocumentBatchProcessRequest":
+        if not values.document_ids and not values.status and not values.limit:
+            raise ValueError("Provide document_ids, status, or limit to scope reprocessing")
+        return values
+
+
+class DocumentBatchProcessItem(BaseModel):
+    """Outcome for an individual document queued during batch processing."""
+
+    document_id: UUID
+    action: str
+    message: str
+
+
+class DocumentBatchProcessResponse(BaseModel):
+    """Summary response for batch document processing triggers."""
+
+    requested: int
+    matched: int
+    scheduled: int
+    skipped: int
+    missing: List[UUID]
+    results: List[DocumentBatchProcessItem]
 
