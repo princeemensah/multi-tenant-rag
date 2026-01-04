@@ -1,12 +1,17 @@
 """Query tracking ORM models."""
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+
+
+def _utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp for SQLAlchemy defaults."""
+    return datetime.now(UTC)
 
 
 class Query(Base):
@@ -43,8 +48,8 @@ class Query(Base):
 
     query_metadata = Column(JSONB, default=dict)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     tenant = relationship("Tenant", back_populates="queries")
     user = relationship("TenantUser", back_populates="queries")
@@ -75,9 +80,9 @@ class QueryResponse(Base):
     is_cached = Column(Boolean, default=False)
     cache_hit = Column(Boolean, default=False)
 
-    generated_at = Column(DateTime, default=datetime.utcnow, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    generated_at = Column(DateTime, default=_utcnow, index=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     query = relationship("Query", back_populates="response")
 

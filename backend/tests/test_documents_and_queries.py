@@ -11,6 +11,7 @@ from app.api.queries import get_query_analytics
 from app.models.query import Query
 from app.models.tenant import Tenant, TenantUser
 from app.schemas.document import DocumentSearchRequest
+from app.services.vector_service import VectorSearchResults
 
 
 @pytest.fixture
@@ -37,31 +38,45 @@ class _StubVectorService:
     def __init__(self):
         self.last_call = {}
 
-    async def search_documents(self, *, tenant_id, query_embedding, limit, score_threshold, filter_conditions):
+    async def search_documents(
+        self,
+        *,
+        tenant_id,
+        query_embedding,
+        limit,
+        score_threshold,
+        filter_conditions,
+        offset=0,
+    ):
         self.last_call = {
             "tenant_id": tenant_id,
             "query_embedding": query_embedding,
             "limit": limit,
             "score_threshold": score_threshold,
             "filter_conditions": filter_conditions,
+            "offset": offset,
         }
-        return [
-            {
-                "document_id": str(uuid4()),
-                "chunk_id": str(uuid4()),
-                "score": 0.88,
-                "text": "Retained chunk",
-                "source": "incident.txt",
-                "chunk_index": 0,
-                "page_number": 1,
-                "metadata": {
-                    "tags": ["ops"],
-                    "filename": "incident.txt",
-                    "document_type": "playbook",
-                    "created_at": "2024-03-11T00:00:00",
-                },
-            }
-        ]
+        return VectorSearchResults(
+            items=[
+                {
+                    "document_id": str(uuid4()),
+                    "chunk_id": str(uuid4()),
+                    "score": 0.88,
+                    "text": "Retained chunk",
+                    "source": "incident.txt",
+                    "chunk_index": 0,
+                    "page_number": 1,
+                    "metadata": {
+                        "tags": ["ops"],
+                        "filename": "incident.txt",
+                        "document_type": "playbook",
+                        "created_at": "2024-03-11T00:00:00",
+                    },
+                }
+            ],
+            next_offset=offset + limit if limit else None,
+            has_more=False,
+        )
 
 
 @pytest.mark.anyio
@@ -93,7 +108,12 @@ async def test_document_search_includes_filters(db_session, tenant_and_user):
         "document_id": [str(request.document_ids[0])],
         "tags": ["ops"],
     }
+    assert vector_service.last_call["offset"] == 0
     assert response.results[0].doc_metadata["tags"] == ["ops"]
+    assert response.offset == 0
+    assert response.next_offset == request.limit
+    assert response.has_more is False
+    assert response.scores == [pytest.approx(0.88)]
 
 
 @pytest.mark.anyio
@@ -128,8 +148,8 @@ async def test_document_search_filters_by_type_and_dates(db_session, tenant_and_
 @pytest.mark.anyio
 async def test_query_analytics_summary(db_session, tenant_and_user):
     tenant, user = tenant_and_user
-    earlier = datetime.utcnow() - timedelta(days=2)
-    today = datetime.utcnow()
+    earlier = datetime.now(UTC) - timedelta(days=2)
+    today = datetime.now(UTC)
 
     historic_query = Query(
         tenant_id=tenant.id,

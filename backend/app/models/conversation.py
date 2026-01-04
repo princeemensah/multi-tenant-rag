@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+
+
+def _utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp for SQLAlchemy defaults."""
+    return datetime.now(UTC)
 
 
 class ConversationSession(Base):
@@ -23,8 +28,8 @@ class ConversationSession(Base):
     title = Column(String(255), nullable=False)
     message_count = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     tenant = relationship("Tenant", back_populates="conversations")
     created_by = relationship("TenantUser", back_populates="created_conversations")
@@ -54,7 +59,7 @@ class ConversationMessage(Base):
     message_metadata = Column("metadata", JSONB, default=dict)
     sequence = Column(Integer, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)
 
     conversation = relationship("ConversationSession", back_populates="messages")
     tenant = relationship("Tenant", back_populates="conversation_messages")

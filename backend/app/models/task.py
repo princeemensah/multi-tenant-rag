@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
@@ -10,6 +10,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+
+
+def _utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp for SQLAlchemy defaults."""
+    return datetime.now(UTC)
 
 
 class TaskStatus(str, Enum):
@@ -50,8 +55,8 @@ class Task(Base):
     due_date = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     tenant = relationship("Tenant", back_populates="tasks")
     created_by = relationship("TenantUser", foreign_keys=[created_by_id], back_populates="created_tasks")
@@ -99,13 +104,13 @@ class Incident(Base):
     tags = Column(JSONB, default=list)
     incident_metadata = Column(JSONB, default=dict)
 
-    detected_at = Column(DateTime, default=datetime.utcnow, index=True)
+    detected_at = Column(DateTime, default=_utcnow, index=True)
     acknowledged_at = Column(DateTime, nullable=True)
     mitigated_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     tenant = relationship("Tenant", back_populates="incidents")
     reported_by = relationship("TenantUser", back_populates="reported_incidents")

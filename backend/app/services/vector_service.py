@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -21,6 +22,15 @@ from qdrant_client.http.models import (
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class VectorSearchResults:
+    """Normalized shape for vector search responses."""
+
+    items: List[Dict[str, Any]]
+    next_offset: Optional[int] = None
+    has_more: bool = False
 
 
 class QdrantVectorService:
@@ -127,7 +137,8 @@ class QdrantVectorService:
         score_threshold: float = 0.7,
         filter_conditions: Optional[Dict[str, Any]] = None,
         collection_name: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        offset: int = 0,
+    ) -> VectorSearchResults:
         collection = collection_name or self.default_collection
 
         conditions = [FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id))]
@@ -151,18 +162,23 @@ class QdrantVectorService:
         search_filter = Filter(must=conditions)
 
         try:
+            page_size = max(1, limit)
+            start_offset = max(0, offset)
+            fetch_limit = page_size + 1
+
             results = await self.async_client.search(
                 collection_name=collection,
                 query_vector=query_embedding,
                 query_filter=search_filter,
-                limit=limit,
+                limit=fetch_limit,
+                offset=start_offset,
                 score_threshold=score_threshold,
                 with_payload=True,
                 with_vectors=False,
             )
 
             formatted: List[Dict[str, Any]] = []
-            for item in results:
+            for item in results[:page_size]:
                 payload = item.payload or {}
                 formatted.append(
                     {
@@ -174,13 +190,27 @@ class QdrantVectorService:
                         "source": payload.get("source", ""),
                         "page_number": payload.get("page_number"),
                         "chunk_index": payload.get("chunk_index", 0),
-                        "metadata": {k: v for k, v in payload.items() if k not in {"text", "tenant_id", "document_id", "chunk_id", "source", "chunk_index"}},
+                        "metadata": {
+                            k: v
+                            for k, v in payload.items()
+                            if k
+                            not in {
+                                "text",
+                                "tenant_id",
+                                "document_id",
+                                "chunk_id",
+                                "source",
+                                "chunk_index",
+                            }
+                        },
                     }
                 )
-            return formatted
+            has_more = len(results) > page_size
+            next_offset = start_offset + page_size if has_more else None
+            return VectorSearchResults(items=formatted, next_offset=next_offset, has_more=has_more)
         except Exception as exc:
             logger.error("Vector search failed", extra={"error": str(exc)})
-            return []
+            return VectorSearchResults(items=[], next_offset=None, has_more=False)
 
     async def delete_document(
         self,

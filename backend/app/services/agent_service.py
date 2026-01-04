@@ -350,7 +350,7 @@ class AgentService:
         )
 
         contexts: List[ContextSnippet] = []
-        for item in search_results:
+        for item in search_results.items:
             contexts.append(
                 ContextSnippet(
                     chunk_id=str(item.get("chunk_id")),

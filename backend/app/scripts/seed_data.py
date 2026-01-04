@@ -5,7 +5,7 @@ import argparse
 import asyncio
 import logging
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from tempfile import SpooledTemporaryFile
 from typing import Any, Dict, Iterable, List
 from uuid import UUID
@@ -278,7 +278,7 @@ def seed_tasks(
         )
         if existing:
             continue
-        due_date = datetime.utcnow() + timedelta(days=task.get("due_in_days", 7))
+        due_date = datetime.now(UTC) + timedelta(days=task.get("due_in_days", 7))
         task_service.create_task(
             db=db_session,
             tenant_id=tenant.id,

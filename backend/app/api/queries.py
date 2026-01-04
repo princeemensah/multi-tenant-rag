@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -110,18 +110,20 @@ async def debug_search_test(
             score_threshold=score_threshold,
         )
 
-        scores = [item.get("score", 0.0) for item in results]
-        top_results = results[: min(len(results), 3)]
+        scores = [item.get("score", 0.0) for item in results.items]
+        top_results = results.items[: min(len(results.items), 3)]
         return {
             "query": query,
             "tenant_id": str(current_tenant.id),
             "embedding_dimension": len(query_embedding),
             "score_threshold": score_threshold,
-            "results_found": len(results),
+            "results_found": len(results.items),
             "scores": scores,
             "all_scores": scores,
             "sample": top_results,
             "results": top_results,
+            "has_more": results.has_more,
+            "next_offset": results.next_offset,
         }
     except Exception as exc:
         logger.error("Search test failed", extra={"error": str(exc)})
@@ -241,7 +243,7 @@ async def generate_rag_response(
             filter_conditions=filter_conditions or None,
         )
 
-        context_documents = _format_context_documents(search_results)
+        context_documents = _format_context_documents(search_results.items)
         context_text = "\n\n".join(doc.text for doc in context_documents)
 
         user_metadata = {
@@ -440,7 +442,7 @@ async def generate_rag_response_stream(
             filter_conditions=filter_conditions or None,
         )
 
-        formatted_context = _format_context_documents(search_results)
+        formatted_context = _format_context_documents(search_results.items)
         context_payload = [doc.model_dump() for doc in formatted_context]
 
         user_metadata = {
@@ -598,7 +600,7 @@ async def get_query_analytics(
     days: int = 30,
 ):
     try:
-        end_date = datetime.utcnow()
+        end_date = datetime.now(UTC)
         start_date = end_date - timedelta(days=max(days, 1))
         today_start = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
