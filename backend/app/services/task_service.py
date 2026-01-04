@@ -1,7 +1,6 @@
 """Services for managing tenant tasks and incidents."""
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
@@ -13,7 +12,10 @@ from sqlalchemy.orm import Session
 from app.models.task import Incident, IncidentSeverity, IncidentStatus, Task, TaskPriority, TaskStatus
 from app.models.tenant import TenantUser
 
-logger = logging.getLogger(__name__)
+import structlog
+
+
+logger = structlog.get_logger(__name__)
 
 
 class TaskService:
@@ -94,7 +96,7 @@ class TaskService:
         db.add(record)
         db.commit()
         db.refresh(record)
-        logger.info("Task created", extra={"task_id": str(record.id), "tenant": str(tenant_id)})
+        logger.info("Task created", task_id=str(record.id), tenant=str(tenant_id))
         return record
 
     def update_task(
@@ -140,7 +142,7 @@ class TaskService:
 
         db.commit()
         db.refresh(record)
-        logger.info("Task updated", extra={"task_id": str(record.id), "tenant": str(tenant_id)})
+        logger.info("Task updated", task_id=str(record.id), tenant=str(tenant_id))
         return record
 
 
@@ -211,7 +213,7 @@ class IncidentService:
         db.add(record)
         db.commit()
         db.refresh(record)
-        logger.info("Incident created", extra={"incident_id": str(record.id), "tenant": str(tenant_id)})
+        logger.info("Incident created", incident_id=str(record.id), tenant=str(tenant_id))
         return record
 
     def update_incident(
@@ -256,7 +258,7 @@ class IncidentService:
 
         db.commit()
         db.refresh(record)
-        logger.info("Incident updated", extra={"incident_id": str(record.id), "tenant": str(tenant_id)})
+        logger.info("Incident updated", incident_id=str(record.id), tenant=str(tenant_id))
         return record
 
     def summarize_incidents(
