@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -142,6 +142,11 @@ class DocumentService:
         chunk_records: List[DocumentChunk] = []
         vector_payloads: List[Dict[str, Any]] = []
 
+        doc_metadata = document.doc_metadata or {}
+        document_type = doc_metadata.get("document_type")
+        created_at_value = doc_metadata.get("created_at") or document.uploaded_at.isoformat()
+        created_at_iso, created_at_ts = self._normalize_created_at(created_at_value)
+
         for chunk in embedded_chunks:
             chunk_id = uuid.uuid4()
             vector_id = str(uuid.uuid4())
@@ -182,7 +187,13 @@ class DocumentService:
                         "document_metadata": document.doc_metadata,
                         "start_char": record.start_char,
                         "end_char": record.end_char,
+                        "document_type": document_type,
+                        "created_at": created_at_iso,
+                        "created_at_ts": created_at_ts,
                     },
+                    "document_type": document_type,
+                    "created_at": created_at_iso,
+                    "created_at_ts": created_at_ts,
                 }
             )
 
@@ -254,6 +265,26 @@ class DocumentService:
     async def chunk_and_embed(self, text: str) -> List[Dict[str, Any]]:
         chunks = self.embedding_service.chunk_text_for_embedding(text)
         return await self.embedding_service.embed_document_chunks(chunks)
+
+    def _normalize_created_at(self, value: Any) -> tuple[str, float]:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = str(value).strip()
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            try:
+                dt = datetime.fromisoformat(text)
+            except ValueError:
+                dt = datetime.fromtimestamp(0, tz=UTC)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        else:
+            dt = dt.astimezone(UTC)
+
+        normalized_iso = dt.replace(microsecond=0).isoformat()
+        return normalized_iso, dt.timestamp()
 
     def _extract_text(self, path: str, content_type: str) -> str:
         if content_type == "application/pdf" or path.lower().endswith(".pdf"):

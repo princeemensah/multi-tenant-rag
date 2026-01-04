@@ -1,7 +1,7 @@
 """Tests covering document search filters and query analytics summaries."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -54,7 +54,12 @@ class _StubVectorService:
                 "source": "incident.txt",
                 "chunk_index": 0,
                 "page_number": 1,
-                "metadata": {"tags": ["ops"], "filename": "incident.txt"},
+                "metadata": {
+                    "tags": ["ops"],
+                    "filename": "incident.txt",
+                    "document_type": "playbook",
+                    "created_at": "2024-03-11T00:00:00",
+                },
             }
         ]
 
@@ -89,6 +94,35 @@ async def test_document_search_includes_filters(db_session, tenant_and_user):
         "tags": ["ops"],
     }
     assert response.results[0].doc_metadata["tags"] == ["ops"]
+
+
+@pytest.mark.anyio
+async def test_document_search_filters_by_type_and_dates(db_session, tenant_and_user):
+    tenant, user = tenant_and_user
+    request = DocumentSearchRequest(
+        query="analytics",
+        document_types=["playbook", "report"],
+        created_after=datetime(2024, 3, 10, tzinfo=UTC),
+        created_before=datetime(2024, 3, 20, tzinfo=UTC),
+    )
+
+    vector_service = _StubVectorService()
+    embedding_service = _StubEmbeddingService()
+
+    await search_documents(
+        search_request=request,
+        current_user=user,
+        current_tenant=tenant,
+        db=db_session,
+        vector_service=vector_service,
+        embedding_service=embedding_service,
+    )
+
+    filters = vector_service.last_call["filter_conditions"]
+    assert filters["document_type"] == ["playbook", "report"]
+    assert filters["created_at_ts"]["gte"] <= filters["created_at_ts"]["lte"]
+    assert filters["created_at_ts"]["gte"] == pytest.approx(datetime(2024, 3, 10, tzinfo=UTC).timestamp())
+    assert filters["created_at_ts"]["lte"] == pytest.approx(datetime(2024, 3, 20, tzinfo=UTC).timestamp())
 
 
 @pytest.mark.anyio

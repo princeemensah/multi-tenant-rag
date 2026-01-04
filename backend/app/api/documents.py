@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
@@ -257,6 +258,12 @@ async def search_documents(
         filter_conditions["document_id"] = [str(doc_id) for doc_id in search_request.document_ids]
     if search_request.tags:
         filter_conditions["tags"] = search_request.tags
+    if search_request.document_types:
+        filter_conditions["document_type"] = [value.strip() for value in search_request.document_types if value]
+
+    created_range = _build_created_at_range(search_request.created_after, search_request.created_before)
+    if created_range:
+        filter_conditions["created_at_ts"] = created_range
 
     results = await vector_service.search_documents(
         tenant_id=str(current_tenant.id),
@@ -302,3 +309,28 @@ async def search_documents(
         total_found=len(formatted),
         search_time_ms=elapsed_ms,
     )
+
+
+def _build_created_at_range(
+    created_after: Optional[datetime],
+    created_before: Optional[datetime],
+) -> Optional[Dict[str, float]]:
+    if not created_after and not created_before:
+        return None
+
+    range_payload: Dict[str, float] = {}
+
+    if created_after:
+        range_payload["gte"] = _to_utc_timestamp(created_after)
+    if created_before:
+        range_payload["lte"] = _to_utc_timestamp(created_before)
+
+    return range_payload or None
+
+
+def _to_utc_timestamp(value: datetime) -> float:
+    if value.tzinfo is None:
+        normalized = value.replace(tzinfo=UTC)
+    else:
+        normalized = value.astimezone(UTC)
+    return normalized.timestamp()
