@@ -42,9 +42,14 @@ class TenantService:
         return tenant
 
     def get_tenant_by_id(self, db: Session, tenant_id: str) -> Optional[Tenant]:
+        try:
+            resolved_tenant_id = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+        except (ValueError, TypeError):
+            return None
+
         return (
             db.query(Tenant)
-            .filter(and_(Tenant.id == tenant_id, Tenant.is_active.is_(True)))
+            .filter(and_(Tenant.id == resolved_tenant_id, Tenant.is_active.is_(True)))
             .first()
         )
 
