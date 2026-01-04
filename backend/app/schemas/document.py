@@ -90,6 +90,9 @@ class DocumentSearchRequest(BaseModel):
     score_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     document_ids: Optional[List[UUID]] = None
     tags: Optional[List[str]] = None
+    document_types: Optional[List[str]] = None
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
 
 
 class DocumentSearchResult(BaseModel):

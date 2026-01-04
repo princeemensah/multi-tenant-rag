@@ -7,7 +7,16 @@ from uuid import uuid4
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http import models
-from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchAny, MatchValue, PointStruct, VectorParams
+from qdrant_client.http.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchAny,
+    MatchValue,
+    PointStruct,
+    Range,
+    VectorParams,
+)
 
 from app.config import settings
 
@@ -53,6 +62,16 @@ class QdrantVectorService:
                     field_name="document_id",
                     field_schema=models.PayloadSchemaType.KEYWORD,
                 )
+                await self.async_client.create_payload_index(
+                    collection_name=collection,
+                    field_name="document_type",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                await self.async_client.create_payload_index(
+                    collection_name=collection,
+                    field_name="created_at_ts",
+                    field_schema=models.PayloadSchemaType.FLOAT,
+                )
                 logger.info("Created Qdrant collection", extra={"collection": collection})
             return True
         except Exception as exc:
@@ -84,6 +103,12 @@ class QdrantVectorService:
                     "tags": doc.get("tags", []),
                 }
             )
+            if doc.get("document_type"):
+                payload["document_type"] = doc["document_type"]
+            if doc.get("created_at"):
+                payload["created_at"] = doc["created_at"]
+            if doc.get("created_at_ts") is not None:
+                payload["created_at_ts"] = doc["created_at_ts"]
             points.append(PointStruct(id=str(uuid4()), vector=doc["embedding"], payload=payload))
 
         try:
@@ -110,6 +135,16 @@ class QdrantVectorService:
             for key, value in filter_conditions.items():
                 if isinstance(value, list):
                     conditions.append(FieldCondition(key=key, match=MatchAny(any=value)))
+                elif isinstance(value, dict):
+                    range_kwargs: Dict[str, float] = {}
+                    gte = value.get("gte")
+                    lte = value.get("lte")
+                    if gte is not None:
+                        range_kwargs["gte"] = float(gte)
+                    if lte is not None:
+                        range_kwargs["lte"] = float(lte)
+                    if range_kwargs:
+                        conditions.append(FieldCondition(key=key, range=Range(**range_kwargs)))
                 else:
                     conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
 
