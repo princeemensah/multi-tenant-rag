@@ -37,6 +37,8 @@ class DocumentService:
         self.upload_dir = Path(settings.upload_dir)
         self.max_file_size = settings.max_file_size_mb * 1024 * 1024
         self.allowed_types = {ext.lower() for ext in settings.allowed_file_types}
+        self.chunk_max_chars = settings.chunk_max_chars
+        self.chunk_overlap_chars = settings.chunk_overlap_chars
         self.embedding_service = EmbeddingService()
         self.vector_service = QdrantVectorService()
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +136,11 @@ class DocumentService:
         await self.vector_service.delete_document(str(tenant_uuid), str(document.id))
         db.flush()
 
-        chunks = self.embedding_service.chunk_text_for_embedding(text)
+        chunks = self.embedding_service.chunk_text_for_embedding(
+            text,
+            max_chunk_size=self.chunk_max_chars,
+            overlap_size=self.chunk_overlap_chars,
+        )
         if not chunks:
             document.status = "failed"
             db.commit()

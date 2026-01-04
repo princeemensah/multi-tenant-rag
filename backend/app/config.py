@@ -43,6 +43,9 @@ class Settings(BaseSettings):
         env="ALLOWED_FILE_TYPES",
     )
 
+    chunk_max_chars: int = Field(default=512, env="CHUNK_MAX_CHARS")
+    chunk_overlap_chars: int = Field(default=50, env="CHUNK_OVERLAP_CHARS")
+
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     log_format: str = Field(default="json", env="LOG_FORMAT")
 
