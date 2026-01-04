@@ -29,6 +29,14 @@ class Tenant(Base):
     users = relationship("TenantUser", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
     queries = relationship("Query", back_populates="tenant", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="tenant", cascade="all, delete-orphan")
+    incidents = relationship("Incident", back_populates="tenant", cascade="all, delete-orphan")
+    conversations = relationship("ConversationSession", back_populates="tenant", cascade="all, delete-orphan")
+    conversation_messages = relationship(
+        "ConversationMessage",
+        back_populates="tenant",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging
         return f"<Tenant id={self.id} name={self.name!r}>"
@@ -56,6 +64,19 @@ class TenantUser(Base):
 
     tenant = relationship("Tenant", back_populates="users")
     queries = relationship("Query", back_populates="user", cascade="all, delete-orphan")
+    created_tasks = relationship("Task", foreign_keys="Task.created_by_id", back_populates="created_by")
+    assigned_tasks = relationship("Task", foreign_keys="Task.assigned_to_id", back_populates="assigned_to")
+    reported_incidents = relationship("Incident", foreign_keys="Incident.reported_by_id", back_populates="reported_by")
+    created_conversations = relationship(
+        "ConversationSession",
+        foreign_keys="ConversationSession.created_by_id",
+        back_populates="created_by",
+    )
+    conversation_messages = relationship(
+        "ConversationMessage",
+        foreign_keys="ConversationMessage.author_id",
+        back_populates="author",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<TenantUser id={self.id} email={self.email!r} tenant_id={self.tenant_id}>"

@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="AI Operations Assistant", env="APP_NAME")
-    app_version: str = Field(default="0.1.0", env="APP_VERSION")
+    app_name: str = Field(default="Multi-Tenant RAG System", env="APP_NAME")
+    app_version: str = Field(default="1.0.0", env="APP_VERSION")
     debug: bool = Field(default=False, env="DEBUG")
 
     database_url: str = Field(env="DATABASE_URL")
@@ -33,13 +33,13 @@ class Settings(BaseSettings):
     embedding_dimension: int = Field(default=384, env="EMBEDDING_DIMENSION")
 
     allowed_hosts: Union[List[str], str] = Field(
-        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        default=["localhost", "127.0.0.1", "0.0.0.0"],
         env="ALLOWED_HOSTS",
     )
-    max_file_size_mb: int = Field(default=25, env="MAX_FILE_SIZE_MB")
+    max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
     upload_dir: str = Field(default="./uploads", env="UPLOAD_DIR")
     allowed_file_types: Union[List[str], str] = Field(
-        default=["pdf", "txt", "md"],
+        default=["pdf", "txt", "docx"],
         env="ALLOWED_FILE_TYPES",
     )
 

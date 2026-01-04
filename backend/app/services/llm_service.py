@@ -266,6 +266,12 @@ class LLMService:
         self._initialize_providers()
         self.default_provider = settings.default_llm_provider or next(iter(self.providers))
 
+    def _resolve_model(self, provider: BaseProvider, requested: Optional[str]) -> str:
+        if requested:
+            return requested
+        options = provider.get_available_models()
+        return options[0] if options else "default"
+
     def _initialize_providers(self) -> None:
         if settings.openai_api_key:
             try:
@@ -296,6 +302,7 @@ class LLMService:
         query: str,
         context_documents: List[Dict[str, Any]],
         system_prompt: Optional[str],
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, str]]:
         prompt = system_prompt or (
             "You are a helpful assistant. Base every answer on the supplied context. "
@@ -309,10 +316,34 @@ class LLMService:
             context_sections.append(f"[Document {index} - {source}]\n{text}")
         context_block = "\n\n".join(context_sections)
 
+        conversation_lines: List[str] = []
+        if conversation_history:
+            for message in conversation_history:
+                role_value = message.get("role", "user")
+                role = str(role_value).strip().lower()
+                if role not in {"user", "assistant"}:
+                    continue
+                content_value = message.get("content", "")
+                content = str(content_value).strip()
+                if not content:
+                    continue
+                speaker = "User" if role == "user" else "Assistant"
+                conversation_lines.append(f"{speaker}: {content}")
+
+        conversation_block = ""
+        if conversation_lines:
+            conversation_block = "Conversation History:\n" + "\n".join(conversation_lines)
+
+        user_sections: List[str] = []
+        if conversation_block:
+            user_sections.append(conversation_block)
+        user_sections.append(f"Question: {query}")
         if context_block:
-            user_content = f"Question: {query}\n\nContext:\n{context_block}"
+            user_sections.append(f"Context:\n{context_block}")
         else:
-            user_content = f"Question: {query}\n\nContext: <none>"
+            user_sections.append("Context:\n<none>")
+
+        user_content = "\n\n".join(user_sections)
 
         return [
             {"role": "system", "content": prompt},
@@ -330,11 +361,12 @@ class LLMService:
         temperature: float,
         max_tokens: int,
         stream: bool,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> Union[LLMResponse, AsyncGenerator[str, None]]:
         llm_provider = self.get_provider(provider)
-        messages = self.build_rag_messages(query, context_documents, system_prompt)
+        messages = self.build_rag_messages(query, context_documents, system_prompt, conversation_history)
 
-        selected_model = model or (llm_provider.get_available_models()[0] if llm_provider.get_available_models() else "default")
+        selected_model = self._resolve_model(llm_provider, model)
 
         if stream:
             return llm_provider.generate_stream(
@@ -344,6 +376,30 @@ class LLMService:
                 max_tokens=max_tokens,
             )
 
+        return await llm_provider.generate_response(
+            messages,
+            model=selected_model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    async def generate_text_response(
+        self,
+        *,
+        prompt: str,
+        provider: Optional[str],
+        model: Optional[str],
+        system_prompt: Optional[str],
+        temperature: float = 0.2,
+        max_tokens: int = 400,
+    ) -> LLMResponse:
+        llm_provider = self.get_provider(provider)
+        messages: List[Dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        selected_model = self._resolve_model(llm_provider, model)
         return await llm_provider.generate_response(
             messages,
             model=selected_model,

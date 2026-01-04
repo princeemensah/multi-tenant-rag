@@ -174,6 +174,7 @@ class DocumentService:
                     "source": document.original_filename,
                     "page_number": record.page_number,
                     "chunk_index": record.chunk_index,
+                    "tags": document.tags,
                     "metadata": {
                         "filename": document.original_filename,
                         "content_type": document.content_type,

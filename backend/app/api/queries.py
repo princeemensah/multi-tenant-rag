@@ -14,6 +14,7 @@ from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 from sqlalchemy import func
 
 from app.dependencies import (
+    ConversationServiceDep,
     CurrentTenantDep,
     CurrentUserDep,
     DatabaseDep,
@@ -69,12 +70,17 @@ async def debug_vector_status(
             for item in points[:5]
         ]
 
-        return {
+        total_vectors = info.get("points_count") if info else None
+        response_payload = {
             "collection_ready": collection_ready,
             "collection_info": info,
             "tenant_documents": len(points),
+            "tenant_id": str(current_tenant.id),
+            "total_vectors": total_vectors,
             "sample": sample,
+            "sample_documents": sample,
         }
+        return response_payload
     except Exception as exc:  # pragma: no cover - diagnostics only
         logger.error("Vector status probe failed", extra={"error": str(exc)})
         return {
@@ -104,12 +110,18 @@ async def debug_search_test(
             score_threshold=score_threshold,
         )
 
+        scores = [item.get("score", 0.0) for item in results]
+        top_results = results[: min(len(results), 3)]
         return {
             "query": query,
+            "tenant_id": str(current_tenant.id),
             "embedding_dimension": len(query_embedding),
+            "score_threshold": score_threshold,
             "results_found": len(results),
-            "scores": [item.get("score", 0.0) for item in results],
-            "sample": results[: min(len(results), 3)],
+            "scores": scores,
+            "all_scores": scores,
+            "sample": top_results,
+            "results": top_results,
         }
     except Exception as exc:
         logger.error("Search test failed", extra={"error": str(exc)})
@@ -182,9 +194,37 @@ async def generate_rag_response(
     vector_service: VectorServiceDep,
     llm_service: LLMServiceDep,
     embedding_service: EmbeddingServiceDep,
+    conversation_service: ConversationServiceDep,
 ):
     start = time.perf_counter()
     try:
+        session_uuid: Optional[UUID] = None
+        session = None
+        if rag_request.session_id:
+            try:
+                session_uuid = UUID(rag_request.session_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session_id") from exc
+
+            session = conversation_service.get_session(db, current_tenant.id, session_uuid)
+            if not session:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation session not found")
+        else:
+            session = conversation_service.create_session(
+                db,
+                current_tenant.id,
+                created_by_id=current_user.id,
+            )
+            session_uuid = session.id
+
+        if session is None or session_uuid is None:  # defensive guard
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Conversation session unavailable")
+
+        history_limit = 12
+        prior_messages = conversation_service.get_context(db, current_tenant.id, session_uuid, limit=history_limit)
+        llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
+        conversation_turn = session.message_count // 2 + 1
+
         query_embedding = await embedding_service.embed_text(rag_request.query)
 
         filter_conditions: Dict[str, object] = {}
@@ -204,6 +244,22 @@ async def generate_rag_response(
         context_documents = _format_context_documents(search_results)
         context_text = "\n\n".join(doc.text for doc in context_documents)
 
+        user_metadata = {
+            "source": "rag_endpoint",
+            "document_filters": filter_conditions or None,
+            "temperature": rag_request.temperature,
+            "conversation_turn": conversation_turn,
+        }
+        conversation_service.add_message(
+            db,
+            current_tenant.id,
+            session_uuid,
+            role="user",
+            content=rag_request.query,
+            author_id=current_user.id,
+            metadata=user_metadata,
+        )
+
         provider = rag_request.llm_provider or current_tenant.llm_provider
         model = rag_request.llm_model or current_tenant.llm_model
 
@@ -216,6 +272,7 @@ async def generate_rag_response(
             temperature=rag_request.temperature,
             max_tokens=rag_request.max_tokens,
             stream=False,
+            conversation_history=llm_conversation_history,
         )
 
         elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -226,6 +283,26 @@ async def generate_rag_response(
                 retrieved_docs.append(UUID(doc.document_id))
             except ValueError:
                 retrieved_docs.append(uuid4())
+
+        assistant_metadata = {
+            "source": "rag_endpoint",
+            "retrieved_chunks": [doc.chunk_id for doc in context_documents],
+            "retrieved_documents": [doc.document_id for doc in context_documents],
+            "provider": provider,
+            "model": model,
+            "conversation_turn": conversation_turn,
+        }
+        conversation_service.add_message(
+            db,
+            current_tenant.id,
+            session_uuid,
+            role="assistant",
+            content=llm_response.content,
+            author_id=None,
+            metadata=assistant_metadata,
+        )
+
+        session_id_value = str(session_uuid)
 
         query_record = Query(
             tenant_id=current_tenant.id,
@@ -243,8 +320,8 @@ async def generate_rag_response(
             output_tokens=llm_response.usage.get("completion_tokens", 0),
             total_tokens=llm_response.usage.get("total_tokens", 0),
             estimated_cost=llm_response.metadata.get("estimated_cost", 0.0),
-            session_id=rag_request.session_id,
-            conversation_turn=rag_request.conversation_turn,
+            session_id=session_id_value,
+            conversation_turn=conversation_turn,
             query_metadata={"rag_request": rag_request.model_dump(mode="json")},
         )
         db.add(query_record)
@@ -269,7 +346,7 @@ async def generate_rag_response(
 
         background_tasks.add_task(db.expunge, response_record)
 
-        return RAGResponse(
+        rag_payload = RAGResponse(
             query_id=query_record.id,
             query=rag_request.query,
             response=llm_response.content,
@@ -285,10 +362,20 @@ async def generate_rag_response(
             confidence_score=None,
             source_attribution=list({doc.source for doc in context_documents}),
             contains_citations=False,
-            session_id=rag_request.session_id,
-            conversation_turn=rag_request.conversation_turn,
+            session_id=session_id_value,
+            conversation_turn=conversation_turn,
             created_at=query_record.created_at,
         )
+        logger.info(
+            "RAG query completed",
+            extra={
+                "query_id": str(query_record.id),
+                "tenant_id": str(current_tenant.id),
+                "user": current_user.email,
+                "retrieved_chunks": len(context_documents),
+            },
+        )
+        return rag_payload
     except Exception as exc:
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         logger.error("RAG query failed", extra={"error": str(exc)})
@@ -308,40 +395,116 @@ async def generate_rag_response_stream(
     vector_service: VectorServiceDep,
     llm_service: LLMServiceDep,
     embedding_service: EmbeddingServiceDep,
+    conversation_service: ConversationServiceDep,
 ):
     try:
+        session_uuid: Optional[UUID] = None
+        session = None
+        if rag_request.session_id:
+            try:
+                session_uuid = UUID(rag_request.session_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session_id") from exc
+
+            session = conversation_service.get_session(db, current_tenant.id, session_uuid)
+            if not session:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation session not found")
+        else:
+            session = conversation_service.create_session(
+                db,
+                current_tenant.id,
+                created_by_id=current_user.id,
+            )
+            session_uuid = session.id
+
+        if session is None or session_uuid is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Conversation session unavailable")
+
+        history_limit = 12
+        prior_messages = conversation_service.get_context(db, current_tenant.id, session_uuid, limit=history_limit)
+        conversation_turn = session.message_count // 2 + 1
+        llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
+
         query_embedding = await embedding_service.embed_text(rag_request.query)
+        filter_conditions: Dict[str, object] = {}
+        if rag_request.document_ids:
+            filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
+        if rag_request.tags:
+            filter_conditions["tags"] = rag_request.tags
+
         search_results = await vector_service.search_documents(
             tenant_id=str(current_tenant.id),
             query_embedding=query_embedding,
             limit=rag_request.max_chunks,
             score_threshold=rag_request.score_threshold,
+            filter_conditions=filter_conditions or None,
         )
 
-        context_documents = [doc.model_dump() for doc in _format_context_documents(search_results)]
+        formatted_context = _format_context_documents(search_results)
+        context_payload = [doc.model_dump() for doc in formatted_context]
+
+        user_metadata = {
+            "source": "rag_endpoint",
+            "document_filters": filter_conditions or None,
+            "temperature": rag_request.temperature,
+            "conversation_turn": conversation_turn,
+        }
+        conversation_service.add_message(
+            db,
+            current_tenant.id,
+            session_uuid,
+            role="user",
+            content=rag_request.query,
+            author_id=current_user.id,
+            metadata=user_metadata,
+        )
 
         provider = rag_request.llm_provider or current_tenant.llm_provider
         model = rag_request.llm_model or current_tenant.llm_model
 
         stream = await llm_service.generate_rag_response(
             query=rag_request.query,
-            context_documents=context_documents,
+            context_documents=context_payload,
             provider=provider,
             model=model,
             system_prompt=rag_request.system_prompt,
             temperature=rag_request.temperature,
             max_tokens=rag_request.max_tokens,
             stream=True,
+            conversation_history=llm_conversation_history,
         )
+
+        accumulated_chunks: List[str] = []
 
         async def iterator() -> AsyncGenerator[str, None]:
             try:
                 async for chunk in stream:
-                    yield f"data: {chunk}\n\n"
+                    if chunk:
+                        accumulated_chunks.append(chunk)
+                        yield f"data: {chunk}\n\n"
+                full_response = "".join(accumulated_chunks)
+                assistant_metadata = {
+                    "source": "rag_endpoint",
+                    "retrieved_chunks": [doc.chunk_id for doc in formatted_context],
+                    "retrieved_documents": [doc.document_id for doc in formatted_context],
+                    "provider": provider,
+                    "model": model,
+                    "conversation_turn": conversation_turn,
+                }
+                if full_response:
+                    conversation_service.add_message(
+                        db,
+                        current_tenant.id,
+                        session_uuid,
+                        role="assistant",
+                        content=full_response,
+                        author_id=None,
+                        metadata=assistant_metadata,
+                    )
                 yield "data: [DONE]\n\n"
             except Exception as exc:  # pragma: no cover - streaming best-effort
                 logger.error("Streaming RAG failed", extra={"error": str(exc)})
-                yield f"data: [ERROR: {str(exc)}]\n\n"
+                yield f"data: [ERROR]\n\n"
 
         return StreamingResponse(
             iterator(),
@@ -351,6 +514,8 @@ async def generate_rag_response_stream(
                 "Connection": "keep-alive",
             },
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Unable to start streaming response", extra={"error": str(exc)})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Streaming RAG query failed")

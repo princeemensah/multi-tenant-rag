@@ -18,7 +18,7 @@ async def init_db() -> None:
 
 def create_tables() -> None:
     """Create all database tables if they do not exist."""
-    from app.models import document, query, tenant  # noqa: F401
+    from app.models import conversation, document, query, task, tenant  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ensured")
