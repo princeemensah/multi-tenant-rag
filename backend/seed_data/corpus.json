@@ -1,0 +1,418 @@
+{
+  "tenants": [
+    {
+      "name": "Aperture Operations",
+      "subdomain": "aperture",
+      "llm_provider": "openai",
+      "llm_model": "gpt-4o-mini",
+      "documents": [
+        {
+          "title": "Logistics Network Outage Playbook",
+          "filename": "aperture_network_outage_playbook.txt",
+          "document_type": "playbook",
+          "created_at": "2024-03-11",
+          "tags": ["operations", "incident-response", "network"],
+          "metadata": {
+            "audience": "Site reliability captains",
+            "revision": "2.1",
+            "service_tier": "critical"
+          },
+          "content": "This playbook documents the rapid response plan for loss of connectivity across the logistics network. It outlines the shared vocabulary for severity levels and references the unified severity matrix used by every tenant to decide escalation paths. The zero downtime maintenance window is reiterated because regional carriers rely on it for compliance audits.\n\nPhase one focuses on triage. Shift leads verify telemetry gaps, cross-check the observability dashboards, and initiate the lattice alert for incident commanders. Within fifteen minutes the command channel must brief the partner retailers, emphasizing shipment protection steps and alternative routing guidance.\n\nPhase two coordinates recovery. Robotics handlers move critical pallets to safe zones, while the platform team deploys the service rollback bundles. Documented dependencies on third-party fulfillment gateways highlight where the multi-tenant isolation guardrails prevent cross-tenant data leakage during recovery."
+        },
+        {
+          "title": "Warehouse Robotics Safety Guidelines",
+          "filename": "aperture_robotics_safety_guidelines.txt",
+          "document_type": "policy",
+          "created_at": "2024-01-22",
+          "tags": ["safety", "robotics", "policy"],
+          "metadata": {
+            "owner": "Environmental Health and Safety",
+            "regulation": "OSHA 1910",
+            "audience": "Shift supervisors"
+          },
+          "content": "These guidelines define the safe operating practices for autonomous forklifts and conveyor robots at the Aperture distribution centers. The policy aligns with the corporate incident severity matrix so that injury events are categorized in the same manner as service interruptions.\n\nOperators must perform a ten-point inspection before assuming control of any mixed-mode equipment. The inspection checklist mirrors the one used by SkyShield during facility hardening, reinforcing shared terminology for stop-gap controls and verification.\n\nIn the event of a robotics stall that threatens worker safety, teams invoke the zero downtime patch window communication protocol to halt all remote updates. The compliance section clarifies how the safety system logs feed into the broader audit dashboard consumed by tenant executives."
+        },
+        {
+          "title": "Quarterly Fulfillment Analytics Q1 2024",
+          "filename": "aperture_fulfillment_analytics_q1.txt",
+          "document_type": "report",
+          "created_at": "2024-04-08",
+          "tags": ["analytics", "fulfillment", "reporting"],
+          "metadata": {
+            "data_source": "Telemetry warehouse",
+            "prepared_by": "Revenue intelligence",
+            "confidence": "0.91"
+          },
+          "content": "The first quarter analytics review compares cycle time across the multi-tenant fleet as part of the recurring observability series. The report demonstrates how document retrieval insights forecast late orders with higher accuracy when paired with the predictive embedding service.\n\nEach tenant sees a tailored view, but the underlying model uses the same contextual chunking strategy. The overlap window mirrors the configuration adopted by Greenline so cross-team experiments remain comparable.\n\nHighlights include a five percent reduction in premium carrier spend after introducing the zero downtime patch window for inventory reconciliation jobs. The appendix includes SQL templates and vector payload references used by the agent when summarizing data for leadership."
+        },
+        {
+          "title": "Supplier Risk Assessment Checklist",
+          "filename": "aperture_supplier_risk_checklist.txt",
+          "document_type": "sop",
+          "created_at": "2024-02-14",
+          "tags": ["risk", "procurement", "checklist"],
+          "metadata": {
+            "owner": "Procurement PMO",
+            "review_cadence": "quarterly",
+            "risk_threshold": "medium"
+          },
+          "content": "The supplier risk checklist ensures consistent evaluation of fulfillment partners before contracts are renewed. Teams score vendors against cyber readiness, logistics redundancy, and data residency requirements.\n\nScoring rubrics reference the same severity matrix used in the warehouse robotics safety program, creating shared language for appetite and mitigation plans. For high-risk categories, procurement coordinates with the incident response agent to set automated workflows that mirror SkyShield's containment approach.\n\nThe checklist also documents when to invoke the disaster recovery table-top exercise. If a vendor fails the zero downtime compliance test, the tenant must load remedial playbooks into the retrieval index so the assistant can cite them during corrective action meetings."
+        },
+        {
+          "title": "Disaster Recovery Runbook - Distribution Hubs",
+          "filename": "aperture_dr_runbook_distribution.txt",
+          "document_type": "playbook",
+          "created_at": "2024-05-03",
+          "tags": ["disaster-recovery", "operations", "continuity"],
+          "metadata": {
+            "tier": "tier-1",
+            "contact_matrix": "v3",
+            "last_exercise": "2024-04-10"
+          },
+          "content": "This runbook guides hub managers through total distribution failure scenarios caused by regional blackouts or cyber events. It references the unified severity matrix to ensure that escalation levels map to partner SLAs without ambiguity.\n\nDuring activation, logistics coordinators deploy the shared context builder so that agents receive tenant-specific instructions. The workflow intentionally mirrors Greenline's grid stability process to simplify cross-training.\n\nContainment procedures emphasize data isolation. All tooling invocations repeat the tenant scope to prevent cross-tenant document leakage, a safeguard that executives require after the 2023 audit findings."
+        },
+        {
+          "title": "Inventory Forecasting Tuning Notes",
+          "filename": "aperture_inventory_forecasting_notes.txt",
+          "document_type": "analytics",
+          "created_at": "2024-01-29",
+          "tags": ["analytics", "inventory", "forecasting"],
+          "metadata": {
+            "model_version": "ridge-5.2",
+            "baseline_error": "8.4%",
+            "owner": "Supply analytics"
+          },
+          "content": "These notes capture configuration changes applied to the short-term inventory forecasting model. Analysts increased context window overlap to thirty tokens, mirroring the retrieval settings now recommended for all tenants.\n\nFeature importance plots show that supplier dwell time, cold chain excursions, and zero downtime patch windows produce the highest lift when predicting rush replenishments.\n\nThe document concludes with an action list for the agent to automate. It includes tasks for generating what-if scenarios, tagging warehousing incidents with standardized taxonomy, and alerting procurement when anomaly thresholds mirror those seen in SkyShield's analytics deck."
+        },
+        {
+          "title": "Incident Review - Dock 14 Conveyor Failure",
+          "filename": "aperture_incident_review_dock14.txt",
+          "document_type": "incident_review",
+          "created_at": "2024-03-28",
+          "tags": ["postmortem", "mechanical", "incident"],
+          "metadata": {
+            "severity": "major",
+            "lead_analyst": "Jordan Lee",
+            "action_items": 6
+          },
+          "content": "This retrospective covers the conveyor failure at Dock 14. The outage lasted forty-seven minutes and triggered the shared severity matrix at level two.\n\nTimeline reconstruction shows parallel investigations by robotics maintenance and the network infrastructure pod. Mitigation mirrored the zero downtime patch sequence to protect in-flight orders.\n\nAction items include back-porting SkyShield's structured logging format to capture sensor anomalies and aligning on the agent's phrasing when recommending manual overrides."
+        },
+        {
+          "title": "SLA Alignment Memo for Retail Partners",
+          "filename": "aperture_sla_alignment_memo.txt",
+          "document_type": "memo",
+          "created_at": "2024-02-05",
+          "tags": ["sla", "partner-management", "communication"],
+          "metadata": {
+            "author": "Partnership office",
+            "distribution": "Retail leadership",
+            "next_review": "2024-05-20"
+          },
+          "content": "This memo summarizes the negotiated SLA updates requested by strategic retailers. The language matches the messaging templates stored for SkyShield managed services to keep tone and cadence consistent.\n\nKey clauses reiterate that downtime outside the zero downtime maintenance window is handled through the shared incident severity matrix. The memo references the agent task for generating status digests so teams do not craft bespoke updates under pressure.\n\nAppendices include citation pointers for the retrieval layer, making it easy for the assistant to source this memo during customer escalations."
+        },
+        {
+          "title": "Cold Chain Compliance Cheat Sheet",
+          "filename": "aperture_cold_chain_cheatsheet.txt",
+          "document_type": "compliance",
+          "created_at": "2024-01-12",
+          "tags": ["compliance", "cold-chain", "quality"],
+          "metadata": {
+            "regulation": "FDA 21 CFR 211",
+            "training_required": true,
+            "owner": "Quality assurance"
+          },
+          "content": "The cheat sheet lists compliant temperature ranges, inspection intervals, and documentation requirements for the cold chain program.\n\nSections reference shared terminology such as severity matrices, incident response triggers, and zero downtime communication windows so that assistants can bridge conversations across tenants.\n\nOperators are reminded to upload calibration reports into the retrieval index with tenant metadata intact. Failure to include tenant scope was the root cause of a cross-tenant leak discovered during the last compliance audit."
+        },
+        {
+          "title": "Onboarding FAQ for Shift Leads",
+          "filename": "aperture_shift_lead_faq.txt",
+          "document_type": "faq",
+          "created_at": "2024-04-02",
+          "tags": ["training", "faq", "onboarding"],
+          "metadata": {
+            "audience": "New shift leads",
+            "version": "1.4",
+            "contact": "academy@aperture.example"
+          },
+          "content": "This FAQ accelerates new shift leads through key systems. It shares vocabulary with Greenline's field operations handbook so multi-tenant trainings stay aligned.\n\nQuestions cover how to trigger the logistics agent, where to review the shared severity matrix, and how to request analytics snapshots. Each answer includes the exact command phrasing expected by the orchestration service.\n\nThe final section reiterates the zero downtime maintenance window and the need to reference tenant IDs when invoking automation tools."
+        }
+      ]
+    },
+    {
+      "name": "SkyShield Security",
+      "subdomain": "skyshield",
+      "llm_provider": "openai",
+      "llm_model": "gpt-4o-mini",
+      "documents": [
+        {
+          "title": "Security Operations Center Shift Handbook",
+          "filename": "skyshield_soc_shift_handbook.txt",
+          "document_type": "handbook",
+          "created_at": "2024-01-18",
+          "tags": ["soc", "operations", "training"],
+          "metadata": {
+            "owner": "SOC management",
+            "shift_model": "follow-the-sun",
+            "version": "3.0"
+          },
+          "content": "The SOC handbook defines daily rhythms for tiered analysts. It reuses the shared severity matrix so ticket categorization mirrors the logistics and energy teams.\n\nAnalysts must review the zero downtime patch window at the start of each shift to ensure planned maintenance does not collide with peak detection windows.\n\nEscalation flowcharts illustrate when the agent should invoke create_task to notify incident managers, ensuring the workflow matches Aperture's site reliability rituals."
+        },
+        {
+          "title": "Zero Trust Network Access Policy",
+          "filename": "skyshield_zero_trust_policy.txt",
+          "document_type": "policy",
+          "created_at": "2024-02-09",
+          "tags": ["security", "policy", "access-control"],
+          "metadata": {
+            "owner": "Office of the CISO",
+            "control_family": "AC",
+            "classification": "internal"
+          },
+          "content": "This policy establishes the zero trust posture for the managed SOC environment. It draws comparisons to the multi-tenant data isolation controls that Aperture relies on, reinforcing common vocabulary for auditors.\n\nSections describe continuous authentication, device attestation, and micro-segmentation. Each control maps to the shared incident severity matrix, clarifying how violations escalate.\n\nThe appendix lists retrieval cues that the assistant can use to cite this document when answering compliance questions."
+        },
+        {
+          "title": "Incident Review - Phishing Lateral Movement",
+          "filename": "skyshield_incident_review_phishing.txt",
+          "document_type": "incident_review",
+          "created_at": "2024-03-04",
+          "tags": ["postmortem", "phishing", "incident"],
+          "metadata": {
+            "severity": "high",
+            "dwell_time_minutes": 27,
+            "lessons_learnt": 5
+          },
+          "content": "This review chronicles a phishing campaign that bypassed conditional access and achieved lateral movement. Containment followed the same zero downtime playbook used by Aperture to protect logistics systems.\n\nTimeline reconstruction emphasizes speedy agent coordination. Automated enrichment tags highlight why tenant scope must be explicit to prevent cross-tenant data exposure.\n\nAction items include aligning analytics dashboards with Greenline's anomaly scoring so reporting stays consistent across tenants."
+        },
+        {
+          "title": "Cloud Posture Assessment Summary",
+          "filename": "skyshield_cloud_posture_summary.txt",
+          "document_type": "report",
+          "created_at": "2024-04-17",
+          "tags": ["cloud", "assessment", "report"],
+          "metadata": {
+            "framework": "CIS",
+            "scoring_model": "atlas-2.0",
+            "owner": "Cloud security"
+          },
+          "content": "The assessment summarizes configuration drifts detected across managed customer accounts. It references the same severity matrix thresholds that Greenline energy operations use when ranking infrastructure risks.\n\nFindings focus on identity misconfigurations, unencrypted storage buckets, and outdated container base images. Remediation plans rely on agent-orchestrated checklists, mirroring the workflow described in Aperture's supplier risk checklist.\n\nMetrics show a twenty percent improvement in mean time to remediate after standardizing the zero downtime patch coordination ritual with customer success."
+        },
+        {
+          "title": "Playbook: Ransomware Containment",
+          "filename": "skyshield_ransomware_containment_playbook.txt",
+          "document_type": "playbook",
+          "created_at": "2024-05-06",
+          "tags": ["ransomware", "incident-response", "playbook"],
+          "metadata": {
+            "contact_matrix": "rev-7",
+            "forensics_partner": "Northwind Labs",
+            "last_test": "2024-03-30"
+          },
+          "content": "This playbook orchestrates the first six hours of a ransomware incident. Step zero reaffirms the shared severity matrix rating so that executives across tenants understand the implications.\n\nContainment includes network isolation, privileged credential rotation, and restoration validation. Execution phases intentionally mirror the structure of Greenline's battery farm recovery plan to facilitate cross-tenant staffing rotations.\n\nAutomation hooks specify how the agent should call summarize_incidents to produce rolling stakeholder updates while respecting tenant boundaries."
+        },
+        {
+          "title": "Analytics Report - Detection Coverage",
+          "filename": "skyshield_detection_coverage_report.txt",
+          "document_type": "analytics",
+          "created_at": "2024-02-27",
+          "tags": ["analytics", "detection", "coverage"],
+          "metadata": {
+            "coverage_score": 0.87,
+            "data_sources": 19,
+            "prepared_by": "Threat analytics"
+          },
+          "content": "The detection coverage report benchmarks sensor fidelity and alert efficacy. It leverages the same chunking overlap used by Aperture so that vector comparisons remain stable across tenants.\n\nKey findings highlight blind spots around contractor VPN usage and unmanaged SaaS connectors. Recommendations point to the zero downtime patch calendar to time configuration pushes.\n\nThe report closes with evaluation heuristics for the assistant to gauge retrieval quality, mirroring the evaluation requirements from the take-home brief."
+        },
+        {
+          "title": "Customer Onboarding Checklist - Managed SOC",
+          "filename": "skyshield_onboarding_checklist.txt",
+          "document_type": "checklist",
+          "created_at": "2024-03-19",
+          "tags": ["onboarding", "customer-success", "checklist"],
+          "metadata": {
+            "owner": "Customer success",
+            "duration_days": 30,
+            "dependencies": "Identity, logging"
+          },
+          "content": "This checklist ensures new managed SOC customers are production-ready within thirty days. Tasks include provisioning tenant IDs, configuring agent tool scopes, and aligning on the shared severity matrix definitions.\n\nSteps mirror Aperture's retail partner onboarding track so that cross-functional teams speak the same language.\n\nThe document contains explicit prompts for the assistant to use when validating metadata tagging, preventing accidental cross-tenant retrieval leakage."
+        },
+        {
+          "title": "Threat Intelligence Brief - Q2",
+          "filename": "skyshield_threat_intelligence_brief_q2.txt",
+          "document_type": "report",
+          "created_at": "2024-04-29",
+          "tags": ["threat-intel", "brief", "report"],
+          "metadata": {
+            "audience": "Executive",
+            "release": "Q2",
+            "classification": "restricted"
+          },
+          "content": "The quarterly brief summarizes trending adversary tactics across managed tenants. Analysts reused the same retrieval templates shared with Greenline to align summarization outputs.\n\nSections cover supply chain compromise, destructive wipers, and credential stuffing. Advisories reference the zero downtime patch window so partners coordinate updates without disrupting peak hours.\n\nEach threat theme links back to documented incidents, enabling the agent to surface precise citations during executive briefings."
+        },
+        {
+          "title": "Compliance Matrix - ISO 27001 Controls",
+          "filename": "skyshield_iso27001_matrix.txt",
+          "document_type": "compliance",
+          "created_at": "2024-01-31",
+          "tags": ["compliance", "iso27001", "controls"],
+          "metadata": {
+            "framework": "ISO 27001",
+            "owner": "GRC",
+            "last_audit": "2023-12-15"
+          },
+          "content": "This matrix maps SkyShield control implementations to ISO 27001 requirements. It includes references to the shared severity matrix to demonstrate how incident handling aligns with governance commitments.\n\nColumns specify asset coverage, validation cadence, and associated SOP documents. The same taxonomy appears in Aperture's cold chain compliance sheet, ensuring retrieval consistency.\n\nThe document also lists evaluation metrics for verifying grounded answers, echoing expectations from the take-home brief."
+        },
+        {
+          "title": "Training Curriculum - Tier 1 Analysts",
+          "filename": "skyshield_training_curriculum_tier1.txt",
+          "document_type": "training",
+          "created_at": "2024-02-20",
+          "tags": ["training", "curriculum", "soc"],
+          "metadata": {
+            "duration_weeks": 6,
+            "modality": "blended",
+            "certification": "SOC-101"
+          },
+          "content": "The curriculum outlines the six-week training plan for new tier 1 analysts. Modules include detection theory, cross-tenant isolation safeguards, and zero downtime maintenance awareness.\n\nAssignments require learners to rehearse agent workflows such as get_open_tasks and summarize_incidents. The same exercises appear in Greenline's knowledge base to reinforce collaboration.\n\nCapstone assessments evaluate retrieval precision and the ability to articulate reasoning with citations, fulfilling the rubric's transparency requirement."
+        }
+      ]
+    },
+    {
+      "name": "Greenline Energy",
+      "subdomain": "greenline",
+      "llm_provider": "openai",
+      "llm_model": "gpt-4o-mini",
+      "documents": [
+        {
+          "title": "Grid Stability Monitoring SOP",
+          "filename": "greenline_grid_stability_sop.txt",
+          "document_type": "sop",
+          "created_at": "2024-01-10",
+          "tags": ["grid", "operations", "sop"],
+          "metadata": {
+            "owner": "Control center",
+            "shift_model": "24x7",
+            "revision": "5.3"
+          },
+          "content": "This SOP governs real-time grid stability monitoring. It references the shared severity matrix to synchronize language with Aperture logistics and SkyShield security teams.\n\nOperators review telemetry thresholds, validate phasor measurement unit feeds, and align on zero downtime patch windows before handing off shifts.\n\nAutomation hooks specify when the agent should generate situational summaries, mirroring the workflow described in the logistics network outage playbook."
+        },
+        {
+          "title": "Incident Review - Turbine Vibration Spike",
+          "filename": "greenline_incident_review_turbine_vibration.txt",
+          "document_type": "incident_review",
+          "created_at": "2024-03-07",
+          "tags": ["postmortem", "turbine", "incident"],
+          "metadata": {
+            "severity": "major",
+            "duration_minutes": 62,
+            "lead_engineer": "Priya Desai"
+          },
+          "content": "This post-event analysis covers a vibration spike that threatened turbine integrity. Detection came from the shared analytics pipeline that also feeds Aperture's forecasting notes.\n\nMitigation required coordinated zero downtime maintenance to rebalance load without impacting downstream customers.\n\nLessons learned include propagating SkyShield's structured logging fields to improve forensic traceability and updating retrieval metadata so the assistant cites sensor provenance."
+        },
+        {
+          "title": "Renewable Integration Forecast Report",
+          "filename": "greenline_renewable_integration_report.txt",
+          "document_type": "report",
+          "created_at": "2024-04-12",
+          "tags": ["renewable", "forecast", "report"],
+          "metadata": {
+            "prepared_by": "Energy economics",
+            "model_version": "integrator-7",
+            "confidence": "0.88"
+          },
+          "content": "The integration report forecasts solar and wind contributions for the coming quarter. It leverages the same embedding chunk overlap parameters shared across tenants to keep analytics comparable.\n\nHighlights show how coordinated zero downtime patch windows reduce curtailment during maintenance.\n\nAppendices include prompts for the assistant to explain integration trade-offs with grounded citations, matching evaluation expectations."
+        },
+        {
+          "title": "Maintenance Playbook - Battery Farms",
+          "filename": "greenline_battery_farm_playbook.txt",
+          "document_type": "playbook",
+          "created_at": "2024-02-02",
+          "tags": ["maintenance", "battery", "playbook"],
+          "metadata": {
+            "owner": "Energy storage",
+            "inspection_cadence": "biweekly",
+            "last_drill": "2024-01-20"
+          },
+          "content": "This playbook details preventive and corrective maintenance for battery storage farms. Sequences mimic the ransomware containment steps used by SkyShield, demonstrating cross-tenant reuse of guardrails.\n\nTechnicians perform diagnostics, update firmware within the zero downtime window, and document results in the shared retrieval index.\n\nThe recovery appendix spells out the agent commands that create follow-up tasks for facilities and compliance teams."
+        },
+        {
+          "title": "Emergency Response Checklist - Storm Season",
+          "filename": "greenline_storm_season_checklist.txt",
+          "document_type": "checklist",
+          "created_at": "2024-05-01",
+          "tags": ["emergency", "storm", "checklist"],
+          "metadata": {
+            "season": "2024",
+            "owner": "Regional operations",
+            "channels": "radio, sat, sms"
+          },
+          "content": "The storm season checklist ensures crews secure assets ahead of severe weather. Steps reuse the severity matrix definitions to synchronize with municipal partners.\n\nPreparations include verifying backup generation, coordinating zero downtime patch windows with utilities, and staging restoration equipment.\n\nThe closing section defines the structured updates the agent sends to customers, borrowing phrasing from Aperture's SLA memo."
+        },
+        {
+          "title": "Analytics Dashboard Notes - Demand Response",
+          "filename": "greenline_demand_response_dashboard_notes.txt",
+          "document_type": "analytics",
+          "created_at": "2024-01-26",
+          "tags": ["analytics", "demand-response", "dashboard"],
+          "metadata": {
+            "dashboard": "Demand Response v2",
+            "owner": "Market operations",
+            "data_refresh_minutes": 15
+          },
+          "content": "These notes document the configuration of the demand response dashboard. Metrics align with Aperture's fulfillment analytics to maintain consistent terminology.\n\nAnnotations describe how the assistant should summarize anomalies, including references to the shared severity matrix and zero downtime patch calendars.\n\nA troubleshooting appendix highlights recurring data quality issues and the agent tasks that resolve them."
+        },
+        {
+          "title": "Regulatory Filing Guide - NERC CIP",
+          "filename": "greenline_nerc_cip_filing_guide.txt",
+          "document_type": "compliance",
+          "created_at": "2024-02-15",
+          "tags": ["compliance", "nerc", "filing"],
+          "metadata": {
+            "regulation": "NERC CIP",
+            "owner": "Regulatory affairs",
+            "submission_window": "Q1"
+          },
+          "content": "The filing guide consolidates evidence requirements for NERC CIP submissions. It cross-references the ISO 27001 matrix maintained by SkyShield to ensure terminology alignment.\n\nSections explain how to export audit-ready data from the retrieval layer while preserving tenant isolation.\n\nThe guide reiterates that zero downtime patch windows must be coordinated before filing to avoid integrity questions, echoing Aperture's supplier checklist."
+        },
+        {
+          "title": "Safety Policy - Substation Work",
+          "filename": "greenline_safety_policy_substation.txt",
+          "document_type": "policy",
+          "created_at": "2024-03-22",
+          "tags": ["safety", "substation", "policy"],
+          "metadata": {
+            "owner": "HSE",
+            "regulation": "NFPA 70E",
+            "training_required": true
+          },
+          "content": "This policy codifies electrical safety practices for substation maintenance. It intentionally mirrors the robotics safety guidelines from Aperture so crews already familiar with shared vocabulary can adapt quickly.\n\nLockout-tagout procedures map to the severity matrix to ensure consistent escalation of near misses.\n\nThe policy instructs teams to capture lessons learned in the retrieval system, tagging documents with tenant IDs to reinforce isolation guards."
+        },
+        {
+          "title": "Customer Advisory - Planned Outage Messaging",
+          "filename": "greenline_customer_advisory_planned_outage.txt",
+          "document_type": "memo",
+          "created_at": "2024-04-05",
+          "tags": ["customer", "communication", "outage"],
+          "metadata": {
+            "owner": "Customer experience",
+            "distribution": "Commercial accounts",
+            "template_version": "2.2"
+          },
+          "content": "The advisory template standardizes communication for planned outages. Messaging aligns with Aperture's retail SLA memo and SkyShield's customer onboarding checklist to maintain tone consistency.\n\nIt highlights zero downtime patch windows, describes how the agent provides real-time updates, and references the shared severity matrix to set clear expectations.\n\nThe appendix lists localized phrasing variations for different regulatory regions."
+        },
+        {
+          "title": "Knowledge Base FAQ - Field Sensors",
+          "filename": "greenline_field_sensors_faq.txt",
+          "document_type": "faq",
+          "created_at": "2024-03-01",
+          "tags": ["faq", "sensors", "field-ops"],
+          "metadata": {
+            "audience": "Field technicians",
+            "support_channel": "Teams",
+            "version": "1.3"
+          },
+          "content": "This FAQ answers recurring questions about field sensor maintenance. The format mirrors Aperture's shift lead FAQ and SkyShield's training curriculum, reinforcing the same cues for the agent.\n\nTopics include calibration workflows, zero downtime patch scheduling, and how to retrieve substation safety policies within the assistant.\n\nEach answer references relevant documents by title so retrieval citations remain transparent."
+        }
+      ]
+    }
+  ]
+}
