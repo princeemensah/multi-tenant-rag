@@ -20,7 +20,11 @@ def _make_upload(filename: str, content: bytes) -> UploadFile:
 class _StubEmbeddingService:
     model_name = "stub"
 
-    def chunk_text_for_embedding(self, text: str):
+    def __init__(self) -> None:
+        self.last_chunk_args: dict[str, int] | None = None
+
+    def chunk_text_for_embedding(self, text: str, max_chunk_size: int = 512, overlap_size: int = 50):
+        self.last_chunk_args = {"max_chunk_size": max_chunk_size, "overlap_size": overlap_size}
         t = text.strip()
         return [{"text": t, "chunk_index": 0, "start_char": 0, "end_char": len(t), "chunk_size": len(t)}]
 
@@ -89,8 +93,11 @@ async def test_upload_document_stores_metadata(tmp_path, db_session, monkeypatch
 @pytest.mark.anyio
 async def test_process_document_creates_chunks(tmp_path, db_session, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "chunk_max_chars", 256)
+    monkeypatch.setattr(settings, "chunk_overlap_chars", 32)
     service = DocumentService()
-    service.embedding_service = _StubEmbeddingService()
+    embedding_stub = _StubEmbeddingService()
+    service.embedding_service = embedding_stub
     vector_stub = _StubVectorService()
     service.vector_service = vector_stub
 
@@ -129,6 +136,7 @@ async def test_process_document_creates_chunks(tmp_path, db_session, monkeypatch
     )
     assert payload["created_at_ts"] == pytest.approx(expected_ts)
     assert payload["metadata"]["document_metadata"] == metadata
+    assert embedding_stub.last_chunk_args == {"max_chunk_size": 256, "overlap_size": 32}
 
 
 @pytest.mark.anyio

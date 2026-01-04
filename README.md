@@ -31,6 +31,15 @@ Use `--skip-docs` to omit document ingestion when Qdrant is unavailable. The scr
 
 Additional design documentation and setup instructions will follow as the implementation progresses.
 
+## Configuration
+
+Populate a `.env` file (or export environment variables) with the following chunking controls to tune how documents are split before embedding:
+
+- `CHUNK_MAX_CHARS` — maximum characters per chunk, defaults to 512.
+- `CHUNK_OVERLAP_CHARS` — overlap between consecutive chunks, defaults to 50.
+
+The backend reads these values via Settings in [backend/app/config.py](backend/app/config.py), allowing you to widen or shrink chunk sizing without code changes.
+
 ## Agent Layer Overview
 
 - **Endpoint**: `POST /api/v1/agent/execute`
