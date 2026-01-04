@@ -3,8 +3,10 @@ import os
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
@@ -51,3 +53,16 @@ def db_session() -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def client(monkeypatch) -> Iterator[TestClient]:
+    from app.services.vector_service import QdrantVectorService
+
+    monkeypatch.setattr(QdrantVectorService, "init_collection", AsyncMock(return_value=True))
+    monkeypatch.setattr(QdrantVectorService, "health_check", AsyncMock(return_value=True))
+
+    from app.main import app
+
+    with TestClient(app) as test_client:
+        yield test_client
