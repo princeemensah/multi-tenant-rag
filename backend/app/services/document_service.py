@@ -50,9 +50,11 @@ class DocumentService:
         title: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> Document:
+        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
+
         self._validate_file(file)
         file_ext = self._infer_extension(file.filename)
-        stored_name = f"{tenant_id}_{uuid.uuid4()}.{file_ext}"
+        stored_name = f"{tenant_uuid}_{uuid.uuid4()}.{file_ext}"
         file_path = self.upload_dir / stored_name
 
         raw = await file.read()
@@ -66,7 +68,7 @@ class DocumentService:
             raise HTTPException(status_code=500, detail="Failed to store uploaded file") from exc
 
         document = Document(
-            tenant_id=tenant_id,
+            tenant_id=tenant_uuid,
             filename=stored_name,
             original_filename=file.filename or stored_name,
             content_type=file.content_type or self._guess_mime(file_ext),
@@ -81,7 +83,7 @@ class DocumentService:
         db.add(document)
         db.commit()
         db.refresh(document)
-        logger.info("Document uploaded", extra={"document_id": str(document.id), "tenant": tenant_id})
+        logger.info("Document uploaded", extra={"document_id": str(document.id), "tenant": str(tenant_uuid)})
         return document
 
     def _validate_file(self, file: UploadFile) -> None:
@@ -104,7 +106,8 @@ class DocumentService:
         return mapping.get(extension, "application/octet-stream")
 
     async def process_document(self, db: Session, document_id: str, tenant_id: str) -> bool:
-        document = self.get_document(db, document_id, tenant_id)
+        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
+        document = self.get_document(db, document_id, tenant_uuid)
         if not document:
             logger.error("Document not found", extra={"document_id": document_id, "tenant": tenant_id})
             return False
@@ -128,7 +131,7 @@ class DocumentService:
 
         # Remove previous artefacts if reprocessing
         db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
-        await self.vector_service.delete_document(tenant_id, str(document.id))
+        await self.vector_service.delete_document(str(tenant_uuid), str(document.id))
         db.flush()
 
         chunks = self.embedding_service.chunk_text_for_embedding(text)
@@ -217,11 +220,12 @@ class DocumentService:
         return True
 
     async def delete_document(self, db: Session, document_id: str, tenant_id: str) -> bool:
-        document = self.get_document(db, document_id, tenant_id)
+        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
+        document = self.get_document(db, document_id, tenant_uuid)
         if not document:
             return False
 
-        await self.vector_service.delete_document(tenant_id, str(document.id))
+        await self.vector_service.delete_document(str(tenant_uuid), str(document.id))
         db.delete(document)
         db.commit()
 
@@ -235,9 +239,14 @@ class DocumentService:
         return True
 
     def get_document(self, db: Session, document_id: str, tenant_id: Optional[str] = None) -> Optional[Document]:
-        query = db.query(Document).filter(Document.id == document_id)
-        if tenant_id:
-            query = query.filter(Document.tenant_id == tenant_id)
+        document_uuid = self._coerce_uuid(document_id)
+        if document_uuid is None:
+            return None
+
+        query = db.query(Document).filter(Document.id == document_uuid)
+        tenant_uuid = self._coerce_uuid(tenant_id)
+        if tenant_uuid:
+            query = query.filter(Document.tenant_id == tenant_uuid)
         return query.first()
 
     def list_documents(
@@ -248,7 +257,8 @@ class DocumentService:
         limit: int = 100,
         status_filter: Optional[str] = None,
     ) -> List[Document]:
-        query = db.query(Document).filter(Document.tenant_id == tenant_id)
+        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
+        query = db.query(Document).filter(Document.tenant_id == tenant_uuid)
         if status_filter:
             query = query.filter(Document.status == status_filter)
         return query.offset(skip).limit(limit).all()
@@ -265,6 +275,22 @@ class DocumentService:
     async def chunk_and_embed(self, text: str) -> List[Dict[str, Any]]:
         chunks = self.embedding_service.chunk_text_for_embedding(text)
         return await self.embedding_service.embed_document_chunks(chunks)
+
+    def _coerce_uuid(self, value: Optional[str]) -> Optional[uuid.UUID]:
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, TypeError):
+            return None
+
+    def _require_uuid(self, value: str, *, field: str) -> uuid.UUID:
+        result = self._coerce_uuid(value)
+        if result is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}")
+        return result
 
     def _normalize_created_at(self, value: Any) -> tuple[str, float]:
         if isinstance(value, datetime):
