@@ -1,12 +1,17 @@
 """Tenant-related ORM models."""
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
+
+
+def _utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp for SQLAlchemy defaults."""
+    return datetime.now(UTC)
 
 
 class Tenant(Base):
@@ -23,8 +28,8 @@ class Tenant(Base):
     max_queries_per_day = Column(Integer, default=10000)
 
     is_active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     users = relationship("TenantUser", back_populates="tenant", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
@@ -59,8 +64,8 @@ class TenantUser(Base):
     email_verified = Column(Boolean, default=False)
     last_login = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     tenant = relationship("Tenant", back_populates="users")
     queries = relationship("Query", back_populates="user", cascade="all, delete-orphan")

@@ -220,7 +220,7 @@ class DocumentService:
         document.processed_chunks = len(chunk_records)
         document.collection_name = self.vector_service.default_collection
         document.embedding_model = self.embedding_service.model_name
-        document.processed_at = datetime.utcnow()
+        document.processed_at = datetime.now(UTC)
         db.commit()
         logger.info("Document processed", extra={"document_id": str(document.id), "chunks": len(chunk_records)})
         return True

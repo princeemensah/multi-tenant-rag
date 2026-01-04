@@ -88,6 +88,7 @@ class DocumentSearchRequest(BaseModel):
     query: str
     limit: int = Field(default=10, ge=1, le=50)
     score_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    offset: int = Field(default=0, ge=0)
     document_ids: Optional[List[UUID]] = None
     tags: Optional[List[str]] = None
     document_types: Optional[List[str]] = None
@@ -115,6 +116,10 @@ class DocumentSearchResponse(BaseModel):
     results: List[DocumentSearchResult]
     total_found: int
     search_time_ms: float
+    offset: int
+    next_offset: Optional[int] = None
+    has_more: bool = False
+    scores: List[float] = Field(default_factory=list)
 
 
 class DocumentBatchProcessRequest(BaseModel):

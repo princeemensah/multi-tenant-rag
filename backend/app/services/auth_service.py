@@ -1,5 +1,5 @@
 """Authentication service for tenant-scoped JWT flows."""
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
@@ -42,8 +42,8 @@ class AuthService:
             "email": email,
             "role": role,
             "permissions": permissions or [],
-            "exp": datetime.utcnow() + timedelta(minutes=self.expire_minutes),
-            "iat": datetime.utcnow(),
+            "exp": datetime.now(UTC) + timedelta(minutes=self.expire_minutes),
+            "iat": datetime.now(UTC),
             "iss": settings.app_name,
             "type": "access_token",
         }
@@ -88,7 +88,7 @@ class AuthService:
         if not user.is_active:
             return None
 
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(UTC)
         db.commit()
         return user
 

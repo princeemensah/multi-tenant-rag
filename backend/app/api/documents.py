@@ -359,10 +359,12 @@ async def search_documents(
         limit=search_request.limit,
         score_threshold=search_request.score_threshold,
         filter_conditions=filter_conditions or None,
+        offset=search_request.offset,
     )
 
     formatted: List[DocumentSearchResult] = []
-    for result in results:
+    scores: List[float] = []
+    for result in results.items:
         document_id = result.get("document_id")
         chunk_id = result.get("chunk_id") or result.get("id")
         if not chunk_id:
@@ -389,6 +391,7 @@ async def search_documents(
                 doc_metadata=result.get("metadata", {}),
             )
         )
+        scores.append(float(result.get("score", 0.0)))
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
     return DocumentSearchResponse(
@@ -396,6 +399,10 @@ async def search_documents(
         results=formatted,
         total_found=len(formatted),
         search_time_ms=elapsed_ms,
+        offset=search_request.offset,
+        next_offset=results.next_offset,
+        has_more=results.has_more,
+        scores=scores,
     )
 
 

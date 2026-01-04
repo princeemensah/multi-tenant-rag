@@ -1,7 +1,7 @@
 """Services for managing tenant tasks and incidents."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
@@ -130,7 +130,7 @@ class TaskService:
                 continue
             if field == "status" and isinstance(value, TaskStatus):
                 setattr(record, field, value.value)
-                record.completed_at = datetime.utcnow() if value == TaskStatus.COMPLETED else None
+                record.completed_at = datetime.now(UTC) if value == TaskStatus.COMPLETED else None
             elif field == "priority" and isinstance(value, TaskPriority):
                 setattr(record, field, value.value)
             elif field == "metadata":
@@ -233,9 +233,9 @@ class IncidentService:
             elif field == "status" and isinstance(value, IncidentStatus):
                 setattr(record, field, value.value)
                 if value == IncidentStatus.MITIGATED and not record.mitigated_at:
-                    record.mitigated_at = datetime.utcnow()
+                    record.mitigated_at = datetime.now(UTC)
                 if value == IncidentStatus.RESOLVED and not record.resolved_at:
-                    record.resolved_at = datetime.utcnow()
+                    record.resolved_at = datetime.now(UTC)
             elif field == "metadata":
                 record.incident_metadata = value
             elif field in {"tags", "impacted_systems"}:
@@ -245,16 +245,16 @@ class IncidentService:
 
         acknowledged = updates.get("acknowledged")
         if acknowledged:
-            record.acknowledged_at = record.acknowledged_at or datetime.utcnow()
+            record.acknowledged_at = record.acknowledged_at or datetime.now(UTC)
 
         mitigated = updates.get("mitigated")
         if mitigated:
-            record.mitigated_at = record.mitigated_at or datetime.utcnow()
+            record.mitigated_at = record.mitigated_at or datetime.now(UTC)
 
         resolved = updates.get("resolved")
         if resolved:
             record.status = IncidentStatus.RESOLVED.value
-            record.resolved_at = record.resolved_at or datetime.utcnow()
+            record.resolved_at = record.resolved_at or datetime.now(UTC)
 
         db.commit()
         db.refresh(record)
@@ -267,7 +267,7 @@ class IncidentService:
         tenant_id: UUID,
         timeframe_days: int = 7,
     ) -> Dict[str, Any]:
-        cutoff = datetime.utcnow() - timedelta(days=max(timeframe_days, 1))
+        cutoff = datetime.now(UTC) - timedelta(days=max(timeframe_days, 1))
 
         incidents = (
             db.query(Incident)
