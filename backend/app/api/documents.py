@@ -5,11 +5,9 @@ import json
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, status
-from sqlalchemy.orm import Session
 
 from app.dependencies import (
     CurrentTenantDep,
@@ -21,6 +19,9 @@ from app.dependencies import (
 )
 from app.models.document import Document, DocumentChunk
 from app.schemas.document import (
+    DocumentBatchProcessItem,
+    DocumentBatchProcessRequest,
+    DocumentBatchProcessResponse,
     DocumentChunkResponse,
     DocumentList,
     DocumentProcessResponse,
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
-def _parse_json_field(raw_value: Optional[str], default):
+def _parse_json_field(raw_value: str | None, default):
     if not raw_value:
         return default
     try:
@@ -48,15 +49,15 @@ def _parse_json_field(raw_value: Optional[str], default):
         if isinstance(default, list) and not isinstance(parsed, list):
             raise ValueError
         return parsed
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         if isinstance(default, list):
             return [item.strip() for item in raw_value.split(",") if item.strip()]
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload")
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload type")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload type") from exc
 
 
-def _parse_upload_payload(raw_value: Optional[str]) -> Tuple[Optional[str], List[str], Dict[str, object]]:
+def _parse_upload_payload(raw_value: str | None) -> tuple[str | None, list[str], dict[str, object]]:
     if not raw_value:
         return None, [], {}
     try:
@@ -81,10 +82,10 @@ async def upload_document(
     db: DatabaseDep,
     document_service: DocumentServiceDep,
     file: UploadFile = File(...),
-    metadata: Optional[str] = Form(None),
-    title: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),
-    upload_payload: Optional[str] = Form(None),
+    metadata: str | None = Form(None),
+    title: str | None = Form(None),
+    tags: str | None = Form(None),
+    upload_payload: str | None = Form(None),
 ):
     payload_title, payload_tags, payload_metadata = _parse_upload_payload(upload_payload)
 
@@ -92,7 +93,7 @@ async def upload_document(
     merged_metadata = {**parsed_metadata, **payload_metadata}
 
     parsed_tags = _parse_json_field(tags, [])
-    combined_tags: List[str] = []
+    combined_tags: list[str] = []
     for value in payload_tags + parsed_tags:
         cleaned = value.strip()
         if cleaned and cleaned not in combined_tags:
@@ -131,7 +132,7 @@ async def list_documents(
     document_service: DocumentServiceDep,
     skip: int = 0,
     limit: int = 20,
-    status_filter: Optional[str] = None,
+    status_filter: str | None = None,
 ):
     documents = document_service.list_documents(
         db=db,
@@ -215,7 +216,7 @@ async def delete_document(
     return {"message": "Document deleted"}
 
 
-@router.get("/{document_id}/chunks", response_model=List[DocumentChunkResponse])
+@router.get("/{document_id}/chunks", response_model=list[DocumentChunkResponse])
 async def get_document_chunks(
     document_id: UUID,
     current_user: CurrentUserDep,
@@ -271,10 +272,11 @@ async def search_documents(
         limit=search_request.limit,
         score_threshold=search_request.score_threshold,
         filter_conditions=filter_conditions or None,
+        offset=search_request.offset,
     )
 
-    formatted: List[DocumentSearchResult] = []
-    for result in results:
+    formatted: list[DocumentSearchResult] = []
+    for result in results.items:
         document_id = result.get("document_id")
         chunk_id = result.get("chunk_id") or result.get("id")
         if not chunk_id:
@@ -308,17 +310,87 @@ async def search_documents(
         results=formatted,
         total_found=len(formatted),
         search_time_ms=elapsed_ms,
+        offset=search_request.offset,
+        next_offset=results.next_offset,
+        has_more=results.has_more,
+        scores=[item.score for item in formatted],
+    )
+
+
+@router.post("/reprocess", response_model=DocumentBatchProcessResponse)
+async def reprocess_documents(
+    request: DocumentBatchProcessRequest,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUserDep,
+    current_tenant: CurrentTenantDep,
+    db: DatabaseDep,
+    document_service: DocumentServiceDep,
+):
+    tenant_id = str(current_tenant.id)
+
+    documents, missing = document_service.select_documents_for_reprocessing(
+        db=db,
+        tenant_id=tenant_id,
+        document_ids=[str(doc_id) for doc_id in request.document_ids] if request.document_ids else None,
+        status_filter=request.status,
+        limit=request.limit,
+    )
+
+    scheduled = 0
+    skipped = 0
+    results: list[DocumentBatchProcessItem] = []
+
+    for document in documents:
+        if document.status == "processed" and not request.force:
+            skipped += 1
+            results.append(
+                DocumentBatchProcessItem(
+                    document_id=document.id,
+                    action="skipped",
+                    message="Document already processed",
+                )
+            )
+            continue
+
+        background_tasks.add_task(document_service.process_document, db, str(document.id), tenant_id)
+        scheduled += 1
+        results.append(
+            DocumentBatchProcessItem(
+                document_id=document.id,
+                action="queued",
+                message="Document processing queued",
+            )
+        )
+
+    for missing_id in missing:
+        results.append(
+            DocumentBatchProcessItem(
+                document_id=missing_id,
+                action="missing",
+                message="Document not found",
+            )
+        )
+
+    requested = len(request.document_ids) if request.document_ids else len(documents)
+
+    return DocumentBatchProcessResponse(
+        requested=requested,
+        matched=len(documents),
+        scheduled=scheduled,
+        skipped=skipped,
+        missing=missing,
+        results=results,
     )
 
 
 def _build_created_at_range(
-    created_after: Optional[datetime],
-    created_before: Optional[datetime],
-) -> Optional[Dict[str, float]]:
+    created_after: datetime | None,
+    created_before: datetime | None,
+) -> dict[str, float] | None:
     if not created_after and not created_before:
         return None
 
-    range_payload: Dict[str, float] = {}
+    range_payload: dict[str, float] = {}
 
     if created_after:
         range_payload["gte"] = _to_utc_timestamp(created_after)

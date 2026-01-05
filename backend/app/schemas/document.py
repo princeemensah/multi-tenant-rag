@@ -1,6 +1,6 @@
 """Document-related Pydantic schemas."""
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field, model_validator
 class DocumentUpload(BaseModel):
     """Optional metadata submitted alongside uploaded files."""
 
-    title: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    title: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class DocumentResponse(BaseModel):
@@ -26,16 +26,16 @@ class DocumentResponse(BaseModel):
     status: str
     total_chunks: int
     processed_chunks: int
-    title: Optional[str] = None
-    summary: Optional[str] = None
+    title: str | None = None
+    summary: str | None = None
     language: str
     word_count: int
-    collection_name: Optional[str] = None
-    embedding_model: Optional[str] = None
-    doc_metadata: Dict[str, Any]
-    tags: List[str]
+    collection_name: str | None = None
+    embedding_model: str | None = None
+    doc_metadata: dict[str, Any]
+    tags: list[str]
     uploaded_at: datetime
-    processed_at: Optional[datetime] = None
+    processed_at: datetime | None = None
     created_at: datetime
 
     class Config:
@@ -45,7 +45,7 @@ class DocumentResponse(BaseModel):
 class DocumentList(BaseModel):
     """Paginated document listing."""
 
-    documents: List[DocumentResponse]
+    documents: list[DocumentResponse]
     total: int
     page: int
     size: int
@@ -58,7 +58,7 @@ class DocumentProcessResponse(BaseModel):
     document_id: UUID
     status: str
     message: str
-    chunks_created: Optional[int] = None
+    chunks_created: int | None = None
 
 
 class DocumentChunkResponse(BaseModel):
@@ -69,13 +69,13 @@ class DocumentChunkResponse(BaseModel):
     chunk_index: int
     text_content: str
     chunk_size: int
-    start_char: Optional[int] = None
-    end_char: Optional[int] = None
-    page_number: Optional[int] = None
-    vector_id: Optional[str] = None
-    embedding_model: Optional[str] = None
-    embedding_dimension: Optional[int] = None
-    doc_metadata: Dict[str, Any]
+    start_char: int | None = None
+    end_char: int | None = None
+    page_number: int | None = None
+    vector_id: str | None = None
+    embedding_model: str | None = None
+    embedding_dimension: int | None = None
+    doc_metadata: dict[str, Any]
     created_at: datetime
 
     class Config:
@@ -89,11 +89,11 @@ class DocumentSearchRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=50)
     score_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     offset: int = Field(default=0, ge=0)
-    document_ids: Optional[List[UUID]] = None
-    tags: Optional[List[str]] = None
-    document_types: Optional[List[str]] = None
-    created_after: Optional[datetime] = None
-    created_before: Optional[datetime] = None
+    document_ids: list[UUID] | None = None
+    tags: list[str] | None = None
+    document_types: list[str] | None = None
+    created_after: datetime | None = None
+    created_before: datetime | None = None
 
 
 class DocumentSearchResult(BaseModel):
@@ -104,30 +104,30 @@ class DocumentSearchResult(BaseModel):
     score: float
     text: str
     source: str
-    page_number: Optional[int] = None
+    page_number: int | None = None
     chunk_index: int
-    doc_metadata: Dict[str, Any]
+    doc_metadata: dict[str, Any]
 
 
 class DocumentSearchResponse(BaseModel):
     """Semantic search response wrapper."""
 
     query: str
-    results: List[DocumentSearchResult]
+    results: list[DocumentSearchResult]
     total_found: int
     search_time_ms: float
     offset: int
-    next_offset: Optional[int] = None
+    next_offset: int | None = None
     has_more: bool = False
-    scores: List[float] = Field(default_factory=list)
+    scores: list[float] = Field(default_factory=list)
 
 
 class DocumentBatchProcessRequest(BaseModel):
     """Batch trigger payload for document reprocessing."""
 
-    document_ids: Optional[List[UUID]] = None
-    status: Optional[str] = Field(default=None, max_length=64)
-    limit: Optional[int] = Field(default=None, ge=1, le=500)
+    document_ids: list[UUID] | None = None
+    status: str | None = Field(default=None, max_length=64)
+    limit: int | None = Field(default=None, ge=1, le=500)
     force: bool = False
 
     @model_validator(mode="after")
@@ -152,6 +152,6 @@ class DocumentBatchProcessResponse(BaseModel):
     matched: int
     scheduled: int
     skipped: int
-    missing: List[UUID]
-    results: List[DocumentBatchProcessItem]
+    missing: list[UUID]
+    results: list[DocumentBatchProcessItem]
 

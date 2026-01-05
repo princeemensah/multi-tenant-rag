@@ -4,14 +4,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from collections.abc import Iterable
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from tempfile import SpooledTemporaryFile
-from typing import Any, Dict, Iterable, List
+from typing import Any
 from uuid import UUID
 
-from starlette.datastructures import UploadFile
 from sqlalchemy.orm import Session
+from starlette.datastructures import UploadFile
 
 from app.database import SessionLocal
 from app.database.connection import create_tables, drop_tables
@@ -25,7 +26,7 @@ from app.services.tenant_service import TenantService
 logger = logging.getLogger(__name__)
 
 
-TENANT_FIXTURES: List[Dict[str, Any]] = [
+TENANT_FIXTURES: list[dict[str, Any]] = [
     {
         "name": "Acme Health",
         "subdomain": "acme-health",
@@ -218,7 +219,7 @@ def parse_args() -> argparse.Namespace:
 def ensure_tenant(
     db_session: Session,
     tenant_service: TenantService,
-    data: Dict[str, Any],
+    data: dict[str, Any],
 ) -> Tenant:
     existing = tenant_service.get_tenant_by_identifier(db_session, data["subdomain"])
     if existing:
@@ -268,7 +269,7 @@ def seed_tasks(
     tenant: Tenant,
     creator: TenantUser,
     assignee: TenantUser,
-    fixtures: Iterable[Dict[str, Any]],
+    fixtures: Iterable[dict[str, Any]],
 ) -> None:
     for task in fixtures:
         existing = (
@@ -298,7 +299,7 @@ def seed_incidents(
     incident_service: IncidentService,
     tenant: Tenant,
     reporter: TenantUser,
-    fixtures: Iterable[Dict[str, Any]],
+    fixtures: Iterable[dict[str, Any]],
 ) -> None:
     for incident in fixtures:
         existing = (
@@ -326,7 +327,7 @@ def seed_incidents(
 async def seed_documents(
     db_session: Session,
     tenant: Tenant,
-    fixtures: Iterable[Dict[str, Any]],
+    fixtures: Iterable[dict[str, Any]],
 ) -> None:
     if not fixtures:
         return

@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
-from typing import AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
@@ -23,7 +23,8 @@ from app.dependencies import (
     RetrievalServiceDep,
     VectorServiceDep,
 )
-from app.models.query import Query, QueryResponse as QueryResponseModel
+from app.models.query import Query
+from app.models.query import QueryResponse as QueryResponseModel
 from app.schemas.query import (
     ContextDocument,
     QueryAnalytics,
@@ -149,8 +150,8 @@ async def debug_search_test(
         }
 
 
-def _format_context_documents(results: List[Dict[str, object]]) -> List[ContextDocument]:
-    formatted: List[ContextDocument] = []
+def _format_context_documents(results: list[dict[str, object]]) -> list[ContextDocument]:
+    formatted: list[ContextDocument] = []
     for result in results:
         chunk_id = str(result.get("chunk_id") or result.get("id") or uuid4())
         document_id = str(result.get("document_id") or uuid4())
@@ -213,7 +214,7 @@ async def generate_rag_response(
 ):
     start = time.perf_counter()
     try:
-        session_uuid: Optional[UUID] = None
+        session_uuid: UUID | None = None
         session = None
         if rag_request.session_id:
             try:
@@ -240,7 +241,7 @@ async def generate_rag_response(
         llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
         conversation_turn = session.message_count // 2 + 1
 
-        filter_conditions: Dict[str, object] = {}
+        filter_conditions: dict[str, object] = {}
         if rag_request.document_ids:
             filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
         if rag_request.tags:
@@ -290,7 +291,7 @@ async def generate_rag_response(
 
         elapsed_ms = (time.perf_counter() - start) * 1000.0
 
-        retrieved_docs: List[UUID] = []
+        retrieved_docs: list[UUID] = []
         for doc in context_documents:
             try:
                 retrieved_docs.append(UUID(doc.document_id))
@@ -396,7 +397,7 @@ async def generate_rag_response(
             await _record_failed_query(db, current_tenant.id, current_user.id, rag_request, exc, elapsed_ms)
         except Exception:  # pragma: no cover - defensive
             db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="RAG query failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="RAG query failed") from exc
 
 
 @router.post("/rag/stream")
@@ -410,7 +411,7 @@ async def generate_rag_response_stream(
     conversation_service: ConversationServiceDep,
 ):
     try:
-        session_uuid: Optional[UUID] = None
+        session_uuid: UUID | None = None
         session = None
         if rag_request.session_id:
             try:
@@ -437,7 +438,7 @@ async def generate_rag_response_stream(
         conversation_turn = session.message_count // 2 + 1
         llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
 
-        filter_conditions: Dict[str, object] = {}
+        filter_conditions: dict[str, object] = {}
         if rag_request.document_ids:
             filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
         if rag_request.tags:
@@ -485,7 +486,7 @@ async def generate_rag_response_stream(
             conversation_history=llm_conversation_history,
         )
 
-        accumulated_chunks: List[str] = []
+        accumulated_chunks: list[str] = []
 
         async def iterator() -> AsyncGenerator[str, None]:
             try:
@@ -515,7 +516,7 @@ async def generate_rag_response_stream(
                 yield "data: [DONE]\n\n"
             except Exception as exc:  # pragma: no cover - streaming best-effort
                 logger.error("Streaming RAG failed", extra={"error": str(exc)})
-                yield f"data: [ERROR]\n\n"
+                yield "data: [ERROR]\n\n"
 
         return StreamingResponse(
             iterator(),
@@ -529,7 +530,7 @@ async def generate_rag_response_stream(
         raise
     except Exception as exc:
         logger.error("Unable to start streaming response", extra={"error": str(exc)})
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Streaming RAG query failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Streaming RAG query failed") from exc
 
 
 @router.get("/history", response_model=QueryHistory)
@@ -539,7 +540,7 @@ async def get_query_history(
     db: DatabaseDep,
     skip: int = 0,
     limit: int = 20,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ):
     try:
         query = (
@@ -558,7 +559,7 @@ async def get_query_history(
         return QueryHistory(queries=items, total=total, page=page, size=size, pages=(total + size - 1) // size)
     except Exception as exc:
         logger.error("Failed to fetch query history", extra={"error": str(exc)})
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query history")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query history") from exc
 
 
 @router.get("/{query_id}", response_model=QueryResponse)
@@ -663,4 +664,4 @@ async def get_query_analytics(
         )
     except Exception as exc:
         logger.error("Failed to compute query analytics", extra={"error": str(exc)})
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query analytics")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get query analytics") from exc

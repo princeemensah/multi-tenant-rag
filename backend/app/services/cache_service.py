@@ -5,7 +5,8 @@ import asyncio
 import hashlib
 import json
 import logging
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 try:  # redis is optional during testing; degrade gracefully when absent
     from redis.asyncio import Redis
@@ -23,22 +24,22 @@ class CacheService:
     def __init__(
         self,
         *,
-        url: Optional[str] = None,
-        namespace: Optional[str] = None,
-        default_ttl: Optional[int] = None,
-        enabled: Optional[bool] = None,
+        url: str | None = None,
+        namespace: str | None = None,
+        default_ttl: int | None = None,
+        enabled: bool | None = None,
     ) -> None:
         self.url = (url or settings.redis_url).strip()
         self.namespace = (namespace or settings.cache_namespace).strip() or "mt_rag"
         self.default_ttl = default_ttl if default_ttl is not None else settings.cache_ttl_seconds
         self.enabled = enabled if enabled is not None else settings.cache_enabled
-        self._client: Optional[Redis] = None
+        self._client: Redis | None = None
         self._lock = asyncio.Lock()
 
         if not self.url:
             self.enabled = False
 
-    async def _get_client(self) -> Optional[Redis]:
+    async def _get_client(self) -> Redis | None:
         if not self.enabled:
             return None
         if Redis is None:  # pragma: no cover - safety when redis is not installed
@@ -71,7 +72,7 @@ class CacheService:
         digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
         return f"{self.namespace}:{digest}"
 
-    async def get_json(self, *parts: Any) -> Optional[dict[str, Any]]:
+    async def get_json(self, *parts: Any) -> dict[str, Any] | None:
         client = await self._get_client()
         if client is None:
             return None
@@ -89,7 +90,7 @@ class CacheService:
             logger.warning("Cache returned invalid JSON", extra={"key": key})
             return None
 
-    async def set_json(self, value: dict[str, Any], *parts: Any, ttl: Optional[int] = None) -> None:
+    async def set_json(self, value: dict[str, Any], *parts: Any, ttl: int | None = None) -> None:
         client = await self._get_client()
         if client is None:
             return

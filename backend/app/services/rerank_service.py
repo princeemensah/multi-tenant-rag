@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.config import settings
 
@@ -21,22 +21,22 @@ class RerankService:
     def __init__(
         self,
         *,
-        model_name: Optional[str] = None,
-        enabled: Optional[bool] = None,
-        max_candidates: Optional[int] = None,
+        model_name: str | None = None,
+        enabled: bool | None = None,
+        max_candidates: int | None = None,
     ) -> None:
         requested = model_name or settings.reranker_model
         self.model_name = requested
         flag = enabled if enabled is not None else settings.reranker_enabled
         self.enabled = bool(flag and CrossEncoder is not None)
         self.max_candidates = max_candidates or settings.reranker_max_candidates
-        self._model: Optional[CrossEncoder] = None
+        self._model: CrossEncoder | None = None
         self._lock = asyncio.Lock()
 
         if flag and CrossEncoder is None:
             logger.warning("Reranker enabled but sentence-transformers is unavailable; skipping load")
 
-    async def _ensure_model(self) -> Optional[CrossEncoder]:
+    async def _ensure_model(self) -> CrossEncoder | None:
         if not self.enabled:
             return None
         if self._model is not None:
@@ -64,10 +64,10 @@ class RerankService:
     async def rerank(
         self,
         query: str,
-        items: List[Dict[str, Any]],
+        items: list[dict[str, Any]],
         *,
-        top_k: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
         if not self.enabled or not items:
             return items
 
@@ -81,7 +81,7 @@ class RerankService:
 
         loop = asyncio.get_running_loop()
 
-        def _predict() -> List[float]:
+        def _predict() -> list[float]:
             scores = model.predict(pairs, convert_to_numpy=True)  # type: ignore[call-arg]
             return scores.tolist() if hasattr(scores, "tolist") else list(scores)
 
@@ -92,7 +92,7 @@ class RerankService:
             return items
 
         ranked = []
-        for candidate, score in zip(candidates, scores):
+        for candidate, score in zip(candidates, scores, strict=False):
             enriched = dict(candidate)
             enriched["rerank_score"] = float(score)
             ranked.append(enriched)

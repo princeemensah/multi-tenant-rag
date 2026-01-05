@@ -1,15 +1,11 @@
 """FastAPI application entrypoint for the Multi-Tenant AI Operations Assistant."""
 from contextlib import asynccontextmanager
-import logging
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import structlog
 
-from app.config import settings
-from app.database import create_tables, init_db
-from app.services.vector_service import QdrantVectorService
 from app.api import (
     agent_router,
     auth_router,
@@ -20,6 +16,9 @@ from app.api import (
     tasks_router,
     tenants_router,
 )
+from app.config import settings
+from app.database import create_tables, init_db
+from app.services.vector_service import QdrantVectorService
 
 structlog.configure(
     processors=[

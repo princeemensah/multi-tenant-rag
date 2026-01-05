@@ -1,8 +1,8 @@
 """Centralized prompt templates for the agent pipeline."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from textwrap import dedent
-from typing import Iterable, List, Optional
 
 
 class PromptTemplateService:
@@ -220,7 +220,7 @@ class PromptTemplateService:
         if not recent:
             return cls.CHAT_TITLE.format(transcript="User: Conversation start")
 
-        lines: List[str] = []
+        lines: list[str] = []
         for message in recent:
             role = getattr(message, "role", None) or (
                 message.get("role") if isinstance(message, dict) else "user"
@@ -242,10 +242,10 @@ class PromptTemplateService:
         contexts: Iterable[dict[str, object]],
         *,
         limit: int = 3,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
     ) -> str:
         sorted_contexts = sorted(contexts, key=lambda item: item.get("score", 0.0), reverse=True)[:limit]
-        parts: List[str] = []
+        parts: list[str] = []
         for index, ctx in enumerate(sorted_contexts, start=1):
             title = ctx.get("document_title") or ctx.get("source") or "Unknown"
             snippet = ctx.get("text") or ctx.get("content") or ""
@@ -260,7 +260,7 @@ class PromptTemplateService:
     @classmethod
     def format_conversation(
         cls,
-        conversation: Optional[Iterable[dict[str, str]]],
+        conversation: Iterable[dict[str, str]] | None,
         query: str,
         *,
         limit: int = 3,
@@ -269,7 +269,7 @@ class PromptTemplateService:
             return query
 
         recent_messages = list(conversation)[-limit:]
-        lines: List[str] = ["Previous conversation:"]
+        lines: list[str] = ["Previous conversation:"]
         for message in recent_messages:
             role = message.get("role", "user")
             if role == "system":

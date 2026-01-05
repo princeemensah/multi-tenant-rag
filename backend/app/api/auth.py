@@ -1,6 +1,5 @@
 """Authentication and tenant administration routes."""
 import logging
-from typing import List
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -131,7 +130,7 @@ async def login_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    permissions: List[str]
+    permissions: list[str]
     if user.role == "admin":
         permissions = ["read", "write", "delete", "manage"]
     elif user.role == "user":
@@ -187,7 +186,7 @@ async def create_tenant(
     return tenant
 
 
-@router.get("/tenants", response_model=List[TenantResponse])
+@router.get("/tenants", response_model=list[TenantResponse])
 async def list_tenants(
     admin_user: AdminUserDep,
     db: DatabaseDep,

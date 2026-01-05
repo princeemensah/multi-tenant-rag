@@ -1,114 +1,209 @@
 # Multi-Tenant RAG & Agentic Operations Assistant
 
-This repository hosts the implementation for a multi-tenant AI Operations Assistant that combines Retrieval-Augmented Generation (RAG), intent classification, and agentic tool execution. The goal is to provide tenant-isolated knowledge retrieval alongside actionable workflows (e.g., task management) while maintaining observability and guardrails.
+<div align="left">
 
-## Status
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Built with: FastAPI + Next.js + Qdrant](https://img.shields.io/badge/Built%20with-FastAPI%20%2B%20Next.js%20%2B%20Qdrant-green.svg)
 
-- Backend scaffolding with multi-tenant auth, document ingestion, task/incident services, and the first agent orchestration pass
-- Frontend integration will follow after wiring the agent API into the chat UI
+</div>
 
-## Repository Layout
+---
 
-- backend/ — FastAPI services, ingestion pipeline, retrieval stack, and domain data models
-- frontend/ — Next.js interface for chat, tooling, and administration (placeholder)
-- Makefile — Common project commands (setup, lint, test, etc.)
+**Documentation**: [docs/README.md](docs/README.md)
 
-## Sample Data
+This repository shows a multi-tenant retrieval-augmented generation (RAG) pipeline, intent-aware agent orchestration, and guarded tool execution behind a FastAPI backend and Next.js frontend.
 
-To load demo tenants (Acme Health, Globex Security, Innotech Manufacturing) together with overlapping tasks, incidents, and Zero Trust policy documents, run:
+## 1. Architecture Overview
 
 ```
-python -m app.scripts.seed_data --reset
+User Query
+	│
+	├─► Intent Classifier (informational / analytical / action / clarify)
+	│        │
+	│        └─► Tool Planner (decide if tools are required)
+	│
+	├─► Retriever (chunking + embeddings + tenant-filtered Qdrant search)
+	│
+	├─► Context Builder (dedupe, rank, cite)
+	│
+	├─► LLM Reasoning (structured prompts, guardrails, streaming events)
+	│
+	└─► Optional Agent Tool Invocation (tasks, documents, incidents)
+				│
+				└─► Response with citations + guardrail summary
 ```
 
-Use `--skip-docs` to omit document ingestion when Qdrant is unavailable. The script is idempotent and skips existing records by title/subdomain.
+- **Backend**: FastAPI, SQLAlchemy, Pydantic, structlog, Redis, PostgreSQL, Qdrant.
+- **Frontend**: Next.js App Router, Tailwind, Radix UI, SWR data hooks.
+- **LLM integration**: Provider-agnostic `LLMService` (OpenAI/Anthropic), MiniLM embeddings for ingestion and retrieval.
+- **Multi-tenancy**: Tenant-scoped DB sessions, tenant metadata enforced at retrieval and tool level.
 
-## Embedding & Vector Strategy
-
-- **Embedding model**: `sentence-transformers/all-MiniLM-L6-v2` (384-dim) balances quality and self-hostability, keeping GPU/CPU footprint low while supporting multilingual tenant content. When OpenAI keys are present, embeddings can fall back to `text-embedding-3-small` for parity with production.
-- **Collection topology**: a single Qdrant collection (`multi_tenant_documents`) stores all chunks with hard tenant filters (`tenant_id`, `document_id`) indexed for fast metadata filtering. This keeps maintenance simple while still guaranteeing isolation at query time.
-- **Filter strategy**: every search request injects tenant-specific filters; additional metadata (tags, document_id) powers fine-grained retrieval without cross-tenant leakage.
-
-Additional design documentation and setup instructions will follow as the implementation progresses.
-
-## Configuration
-
-Populate a `.env` file (or export environment variables) with the following chunking controls to tune how documents are split before embedding:
-
-- `CHUNK_MAX_CHARS` — maximum characters per chunk, defaults to 512.
-- `CHUNK_OVERLAP_CHARS` — overlap between consecutive chunks, defaults to 50.
-
-The backend reads these values via Settings in [backend/app/config.py](backend/app/config.py), allowing you to widen or shrink chunk sizing without code changes.
-
-### Retrieval Tuning
-
-- `CACHE_ENABLED`, `CACHE_NAMESPACE`, `CACHE_TTL_SECONDS` control the Redis-backed retrieval cache. Provide `REDIS_URL` and leave caching enabled to avoid recomputing embeddings for repeated tenant queries. Set `CACHE_ENABLED=false` locally when Redis is unavailable.
-- `RERANKER_ENABLED`, `RERANKER_MODEL`, `RERANKER_MAX_CANDIDATES` enable the optional cross-encoder step in [backend/app/services/rerank_service.py](backend/app/services/rerank_service.py). When enabled, ensure the sentence-transformers package can download the configured model.
-
-### Retrieval Evaluation
-
-Prepare a JSON dataset (see [seed_data/eval_queries.sample.json](seed_data/eval_queries.sample.json) for structure) and run the evaluator to measure hit rate, recall, and MRR:
+## 2. Repository Layout
 
 ```
-python -m app.scripts.evaluate_retrieval --dataset seed_data/eval_queries.sample.json
+backend/     FastAPI application, agents, services, evaluation scripts
+frontend/    Next.js UI for chat, tenant selection, and admin views
+docs/        Supplemental design notes and diagrams
+seed_data/   Demo tenant corpus and evaluation query samples
+uploads/     Example document uploads used during local testing
+Makefile     One-command workflows for setup, linting, tests, and Docker
+docker-compose.yml  Local infrastructure for Postgres, Redis, Qdrant, app containers
 ```
 
-Add `--disable-cache` or `--disable-reranker` to compare retrieval variants. Verbose output surfaces per-query matches for easier troubleshooting.
+## 3. Prerequisites
 
-## Running Locally
+- macOS or Linux (tested on macOS Monterey / Sonoma)
+- Python 3.12 (virtual environment managed via `make install`)
+- Node.js 20 (used by the frontend when running outside Docker)
+- Docker Desktop 4.x (Compose v2)
+- OpenAI / Anthropic API keys (optional, required for live LLM calls)
 
-1. **Infrastructure**
-	- Start Redis (`brew services start redis` or `docker run -p 6379:6379 redis:7`).
-	- Launch Qdrant (`docker run -p 6333:6333 qdrant/qdrant:latest`).
-	- Provide a database URL; SQLite is fine for local work (`DATABASE_URL=sqlite:///./data/app.db`).
-2. **Backend**
-	- Create a virtualenv, install deps, and populate `.env` inside `backend/` with at least:
+## 4. Setup & Local Development
 
-```
-DATABASE_URL=sqlite:///./data/app.db
-REDIS_URL=redis://localhost:6379/0
-JWT_SECRET_KEY=dev-secret-change-me
-APP_NAME=Multi-Tenant RAG System
-DEBUG=1
+### 4.1 Clone the project
+
+```bash
+git clone https://github.com/princeemensah/multi-tenant-rag.git
+cd multi-tenant-rag
 ```
 
-	- Run the API with:
+### 4.2 Configure environment variables
 
-```
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+Backend:
 
-3. **Frontend**
-	- Create `frontend/.env.local` and set `NEXT_PUBLIC_BACKEND_URL` to the backend origin (default `http://localhost:8000`).
-	- Install and start Next.js:
-
-```
-cd frontend
-pnpm install
-pnpm dev
+```bash
+cp backend/.env.example backend/.env
 ```
 
-4. **Smoke Test**
-	- Log in via the web UI, pick a tenant, open a conversation, and send a prompt. You should see a live assistant response while the backend caches and stores the exchange. Use `seed_data/corpus.json` with `python -m app.scripts.seed_data --reset` if you need demo tenants/documents.
+Set values for `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, and any provider credentials (OpenAI, Anthropic). The examples default to local infrastructure.
 
-## Operations
+Frontend:
 
-- Reprocess stored documents by calling POST /api/v1/documents/reprocess with the payload defined in [backend/app/schemas/document.py](backend/app/schemas/document.py#L120-L151). The endpoint accepts explicit document_ids or filtering parameters and queues background processing for matching records.
+```bash
+cp frontend/.env.example frontend/.env.local
+```
 
-## Agent Layer Overview
+Set `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000` for local development.
 
-- **Endpoint**: `POST /api/v1/agent/execute`
-	- Runs LLM-based intent classification, decomposes informational queries, retrieves tenant-scoped context, and synthesises a grounded response.
-	- Action intents are mapped to built-in tools (`create_task`, `get_open_tasks`, `summarize_incidents`) using an LLM planner before executing against tenant data.
-- **Request payload** (`AgentRequest`):
-	- `query` (string, required)
-	- Optional overrides for `llm_provider`, `llm_model`, retrieval cutoffs (`max_chunks`, `score_threshold`)
-- **Response** (`AgentResponse`):
-	- `execution.intent` — classification metadata with confidence and extracted entities
-	- `execution.result` — chat-ready answer plus the context snippets used
-	- `execution.action` — populated when a tool is invoked, including tool outputs for downstream audit trails
+### 4.3 Install dependencies
 
-Agents reuse the existing `LLMService`, `EmbeddingService`, and `QdrantVectorService`, ensuring all tenant isolation guarantees remain intact.
+```bash
+make install
+```
+
+Creates `.venv`, installs backend (editable) and frontend dependencies, and aligns tooling versions (ruff, pytest, TypeScript, etc.).
+
+### 4.4 Start supporting infrastructure
+
+```bash
+make docker-up-infra
+# or
+docker compose up -d postgres redis qdrant
+```
+
+> **DNS on macOS**: If Docker pulls fail with `docker-images-prod...r2.cloudflarestorage.com: no such host`, set Wi-Fi DNS servers to public resolvers and retry:
+> ```bash
+> sudo networksetup -setdnsservers "Wi-Fi" 1.1.1.1 1.0.0.1
+> networksetup -getdnsservers "Wi-Fi"
+> ```
+
+When the infra stack is running, the backend `.env` should target container hostnames:
+
+- `DATABASE_URL=postgresql+psycopg://rag:rag@postgres:5432/rag`
+- `REDIS_URL=redis://redis:6379/0`
+- `QDRANT_HOST=qdrant`, `QDRANT_PORT=6333`
+
+### 4.5 Run the backend API
+
+```bash
+make backend-dev
+```
+
+FastAPI serves at http://localhost:8000 with automatic reload.
+
+### 4.6 Run the frontend UI
+
+```bash
+make frontend-dev
+```
+
+Next.js dev server runs on http://localhost:3000.
+
+## 5. Running the Full Stack in Docker
+
+Both application images are built from Dockerfiles that mirror production packaging:
+
+- **Backend**: [backend/Dockerfile](backend/Dockerfile#L1-L26) installs directly from `pyproject.toml` (`pip install .`).
+- **Frontend**: [frontend/Dockerfile](frontend/Dockerfile#L1-L20) pins Yarn 1.22.22 to stay compatible with the v1 lockfile.
+
+```bash
+docker compose build backend frontend
+docker compose up -d backend frontend
+```
+
+Stop any local `yarn dev` processes occupying port 3000 before starting the frontend container. Tear down the stack with:
+
+```bash
+docker compose down
+```
+
+## 6. Seed Sample Tenants (Optional)
+
+```bash
+make seed
+```
+
+Resets the database and loads demo tenants (Acme Health, Globex Security, Innotech Manufacturing) with documents, tasks, and incidents. Seed scripts rely on the infra services being available.
+
+## 7. Tests
+
+```bash
+make lint            # Ruff (backend) + Next.js lint (frontend)
+make test            # Pytest suite for backend services
+make format-backend  # Ruff format
+make format-frontend # Next.js lint --fix
+```
+
+## 8. Key Design Decisions
+
+### Retrieval Pipeline
+
+- Documents are chunked into windowed segments (default 512 tokens overlap 64) during ingestion.
+- Embeddings use MiniLM via `SentenceTransformerEmbeddingService` for cost-efficient semantic search.
+- Qdrant stores vectors with tenant, document type, created_at metadata to enable compound filtering.
+- Retrieval executes top-k semantic search with optional reranking (BM25 fallback and score-based pruning).
+
+### Multi-Tenant Isolation
+
+- Each request carries a tenant identifier resolved from auth/session middleware.
+- Database access relies on scoped sessions that inject tenant filters at the ORM layer.
+- Retriever queries include tenant metadata filters; cross-tenant results are structurally impossible.
+- Agent tools require tenant IDs explicitly, and data access is validated before execution.
+
+### Agent & Tooling
+
+- `IntentService` classifies requests into informational, analytical, action, or clarify buckets.
+- Planner decides whether to call tools such as `get_open_tasks`, `create_task`, `summarize_incidents`.
+- Tool invocation happens via structured payloads with validation; failures are caught and surfaced to the LLM so it can recover gracefully.
+- Responses include citations to retrieved context and a guardrail summary detailing actions taken.
+
+### Evaluation & Guardrails
+
+- Retrieval evaluation script (`python -m app.scripts.evaluate_retrieval`) reports hit rate and recall on sample queries.
+- Conversations persist telemetry (model, latency, cost, guardrail warnings) for offline analysis.
+- Guardrail service checks context length, content type, and tool call outcomes before completing a response.
+
+### Observability
+
+- `structlog` provides JSON logs with trace IDs across the request lifecycle.
+- Server-sent events stream reasoning steps, retrieved chunks, tool invocations, and guardrail messages to the UI for transparency.
+
+## 9. Troubleshooting
+
+- **Docker DNS failures**: Configure Wi-Fi DNS as described in section 4.4 and restart Docker Desktop.
+- **Port 3000 in use**: Stop any local Next.js dev server (`yarn dev`) before running the frontend container.
+- **Stale volumes**: `docker compose down -v` removes Postgres/Qdrant data if you need a clean environment.
+
+## 10. License
+
+Released under the MIT License (see `LICENSE`).

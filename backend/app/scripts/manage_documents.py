@@ -11,11 +11,11 @@ import asyncio
 import json
 import logging
 import sys
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Awaitable, Callable, Dict, Iterable, List, Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -36,9 +36,9 @@ class SeedDocumentSpec:
     title: str
     content: str
     document_type: str
-    tags: List[str]
+    tags: list[str]
     created_at: str
-    metadata: Dict[str, str]
+    metadata: dict[str, str]
     content_type: str = "text/plain"
 
 
@@ -46,9 +46,9 @@ class SeedDocumentSpec:
 class SeedTenantSpec:
     name: str
     subdomain: str
-    llm_provider: Optional[str]
-    llm_model: Optional[str]
-    documents: List[SeedDocumentSpec]
+    llm_provider: str | None
+    llm_model: str | None
+    documents: list[SeedDocumentSpec]
 
 
 def _normalize_created_at(value: str) -> str:
@@ -62,16 +62,16 @@ def _normalize_created_at(value: str) -> str:
     return parsed.replace(microsecond=0).isoformat()
 
 
-def load_seed_dataset(path: Path) -> List[SeedTenantSpec]:
+def load_seed_dataset(path: Path) -> list[SeedTenantSpec]:
     if not path.exists():
         raise FileNotFoundError(f"Seed dataset not found: {path}")
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     tenants_payload = payload.get("tenants", [])
-    tenants: List[SeedTenantSpec] = []
+    tenants: list[SeedTenantSpec] = []
 
     for tenant_entry in tenants_payload:
-        documents: List[SeedDocumentSpec] = []
+        documents: list[SeedDocumentSpec] = []
         for doc_entry in tenant_entry.get("documents", []):
             created_at = _normalize_created_at(doc_entry.get("created_at", datetime.now(UTC).date().isoformat()))
             metadata = dict(doc_entry.get("metadata", {}))
@@ -397,13 +397,13 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
     _configure_logging(args.verbose)
 
-    handler: Optional[Callable[[argparse.Namespace], Awaitable[None]]] = getattr(args, "handler", None)
+    handler: Callable[[argparse.Namespace], Awaitable[None]] | None = getattr(args, "handler", None)
     if handler is None:
         parser.print_help()
         return 1

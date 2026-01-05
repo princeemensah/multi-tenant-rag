@@ -7,9 +7,11 @@ from .agent import (  # noqa: F401
 	AgentRequest,
 	AgentResponse,
 	AgentResult,
+	AgentStrategy,
 	AgentToolResult,
 	AgentTrace,
-	AgentStrategy,
+)
+from .agent import (
 	ContextSnippet as AgentContextSnippet,
 )
 from .auth import (  # noqa: F401

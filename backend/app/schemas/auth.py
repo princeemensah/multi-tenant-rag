@@ -1,6 +1,6 @@
 """Authentication schema placeholders."""
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
@@ -19,13 +19,13 @@ class UserCreate(UserBase):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
-    tenant_identifier: Optional[str] = None
+    tenant_identifier: str | None = None
 
 
 class UserResponse(UserBase):
     id: UUID | str
     is_active: bool = True
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -35,7 +35,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     expires_in: int
-    user: Optional[UserResponse] = None
+    user: UserResponse | None = None
     tenant: Optional["TenantResponse"] = None
 
 
@@ -44,30 +44,30 @@ class OrganizationSignup(BaseModel):
     admin_email: EmailStr
     admin_username: str
     admin_password: str
-    subdomain: Optional[str] = None
-    llm_provider: Optional[str] = None
-    llm_model: Optional[str] = None
+    subdomain: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
 
 
 class TenantCreate(BaseModel):
     name: str
-    subdomain: Optional[str] = None
-    llm_provider: Optional[str] = None
-    llm_model: Optional[str] = None
+    subdomain: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
 
 
 class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    subdomain: Optional[str] = None
-    llm_provider: Optional[str] = None
-    llm_model: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    subdomain: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    is_active: bool | None = None
 
 
 class TenantResponse(TenantCreate):
     id: UUID | str
     is_active: bool = True
-    created_at: Optional[datetime] = None
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Optional
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from app.dependencies import (
@@ -23,9 +23,6 @@ from app.schemas.conversation import (
     ConversationSessionRename,
     ConversationSessionResponse,
 )
-
-import structlog
-
 
 logger = structlog.get_logger(__name__)
 
@@ -149,7 +146,7 @@ def list_conversation_messages(
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
     limit: int = 50,
-    before_sequence: Optional[int] = None,
+    before_sequence: int | None = None,
 ) -> ConversationMessageList:
     session = conversation_service.get_session(db, current_tenant.id, session_id)
     if not session:

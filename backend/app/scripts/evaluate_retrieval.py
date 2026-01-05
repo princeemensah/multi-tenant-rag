@@ -22,9 +22,10 @@ import asyncio
 import json
 import logging
 import statistics
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from app.services.cache_service import CacheService
 from app.services.embedding_service import EmbeddingService
@@ -39,13 +40,13 @@ logger = logging.getLogger("evaluate_retrieval")
 class EvaluationQuery:
     tenant_id: str
     query: str
-    expected_document_ids: List[str] = field(default_factory=list)
-    expected_sources: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    document_ids: List[str] = field(default_factory=list)
+    expected_document_ids: list[str] = field(default_factory=list)
+    expected_sources: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    document_ids: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_payload(cls, payload: Dict[str, Any]) -> "EvaluationQuery":
+    def from_payload(cls, payload: dict[str, Any]) -> EvaluationQuery:
         if "tenant_id" not in payload or "query" not in payload:
             raise ValueError("Each query requires tenant_id and query")
         return cls(
@@ -61,13 +62,13 @@ class EvaluationQuery:
 @dataclass
 class QueryEvaluationResult:
     query: EvaluationQuery
-    retrieved_ids: List[str]
-    retrieved_sources: List[str]
+    retrieved_ids: list[str]
+    retrieved_sources: list[str]
     hit: bool
     reciprocal_rank: float
     matches: int
 
-    def to_summary(self) -> Dict[str, Any]:
+    def to_summary(self) -> dict[str, Any]:
         return {
             "query": self.query.query,
             "tenant_id": self.query.tenant_id,
@@ -78,7 +79,7 @@ class QueryEvaluationResult:
         }
 
 
-def _normalise(values: Iterable[str]) -> List[str]:
+def _normalise(values: Iterable[str]) -> list[str]:
     return [value.lower() for value in values if value]
 
 
@@ -91,7 +92,7 @@ async def evaluate_query(
     disable_cache: bool,
     disable_reranker: bool,
 ) -> QueryEvaluationResult:
-    filters: Dict[str, Any] = {}
+    filters: dict[str, Any] = {}
     if payload.tags:
         filters["tags"] = payload.tags
     if payload.document_ids:
@@ -117,7 +118,7 @@ async def evaluate_query(
     reciprocal_rank = 0.0
     matches = 0
 
-    for index, (doc_id, source) in enumerate(zip(retrieved_ids, retrieved_sources), start=1):
+    for index, (doc_id, source) in enumerate(zip(retrieved_ids, retrieved_sources, strict=False), start=1):
         normalised_id = doc_id.lower()
         normalised_source = source.lower()
         if expected_ids and normalised_id in expected_ids:
@@ -157,7 +158,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
         logger.error("Dataset contains no queries")
         return 1
 
-    queries: List[EvaluationQuery] = []
+    queries: list[EvaluationQuery] = []
     for entry in queries_raw:
         try:
             query = EvaluationQuery.from_payload(entry)
@@ -185,7 +186,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
         rerank_service=rerank_service,
     )
 
-    results: List[QueryEvaluationResult] = []
+    results: list[QueryEvaluationResult] = []
     for query in queries:
         result = await evaluate_query(
             retrieval_service,
@@ -205,7 +206,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
 
     avg_recall = 0.0
     if any(result.query.expected_document_ids or result.query.expected_sources for result in results):
-        recalls: List[float] = []
+        recalls: list[float] = []
         for result in results:
             targets = max(
                 len(result.query.expected_document_ids),
@@ -224,7 +225,7 @@ async def run_evaluation(args: argparse.Namespace) -> int:
     return 0
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate retrieval quality")
     parser.add_argument("--dataset", required=True, help="Path to evaluation dataset JSON")
     parser.add_argument("--limit", type=int, default=5, help="Number of chunks to retrieve per query")
@@ -237,7 +238,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO))
     try:

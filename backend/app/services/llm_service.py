@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any
 
 from fastapi import HTTPException
+
 from app.config import settings
 
 try:  # Optional OpenAI dependency
@@ -26,11 +28,11 @@ class LLMResponse:
     """Unified language model response."""
 
     content: str
-    usage: Dict[str, int]
+    usage: dict[str, int]
     model: str
     provider: str
     finish_reason: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class BaseProvider:
@@ -40,7 +42,7 @@ class BaseProvider:
 
     async def generate_response(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -50,7 +52,7 @@ class BaseProvider:
 
     async def generate_stream(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -58,7 +60,7 @@ class BaseProvider:
     ) -> AsyncGenerator[str, None]:
         raise NotImplementedError
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         return []
 
 
@@ -74,7 +76,7 @@ class OpenAIProvider(BaseProvider):
 
     async def generate_response(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -104,7 +106,7 @@ class OpenAIProvider(BaseProvider):
 
     async def generate_stream(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -126,7 +128,7 @@ class OpenAIProvider(BaseProvider):
 
         return iterator()
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         return [
             "gpt-4o-mini",
             "gpt-4o",
@@ -147,14 +149,14 @@ class AnthropicProvider(BaseProvider):
 
     async def generate_response(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
         max_tokens: int,
     ) -> LLMResponse:
         system_prompt = ""
-        normalized: List[Dict[str, str]] = []
+        normalized: list[dict[str, str]] = []
         for message in messages:
             if message.get("role") == "system":
                 system_prompt = message.get("content", "")
@@ -184,14 +186,14 @@ class AnthropicProvider(BaseProvider):
 
     async def generate_stream(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
         max_tokens: int,
     ) -> AsyncGenerator[str, None]:
         system_prompt = ""
-        normalized: List[Dict[str, str]] = []
+        normalized: list[dict[str, str]] = []
         for message in messages:
             if message.get("role") == "system":
                 system_prompt = message.get("content", "")
@@ -213,7 +215,7 @@ class AnthropicProvider(BaseProvider):
 
         return iterator()
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         return [
             "claude-3-haiku-20240307",
             "claude-3-sonnet-20240229",
@@ -228,7 +230,7 @@ class FallbackProvider(BaseProvider):
 
     async def generate_response(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -246,7 +248,7 @@ class FallbackProvider(BaseProvider):
 
     async def generate_stream(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         *,
         model: str,
         temperature: float,
@@ -262,11 +264,11 @@ class LLMService:
     """Facade for orchestrating RAG prompts across providers."""
 
     def __init__(self) -> None:
-        self.providers: Dict[str, BaseProvider] = {}
+        self.providers: dict[str, BaseProvider] = {}
         self._initialize_providers()
         self.default_provider = settings.default_llm_provider or next(iter(self.providers))
 
-    def _resolve_model(self, provider: BaseProvider, requested: Optional[str]) -> str:
+    def _resolve_model(self, provider: BaseProvider, requested: str | None) -> str:
         if requested:
             return requested
         options = provider.get_available_models()
@@ -291,7 +293,7 @@ class LLMService:
             logger.warning("No external LLM providers configured; using fallback")
         self.providers.setdefault("fallback", FallbackProvider())
 
-    def get_provider(self, name: Optional[str]) -> BaseProvider:
+    def get_provider(self, name: str | None) -> BaseProvider:
         provider_name = name or self.default_provider
         if provider_name not in self.providers:
             raise HTTPException(status_code=400, detail=f"Unsupported LLM provider '{provider_name}'")  # type: ignore[name-defined]
@@ -300,23 +302,23 @@ class LLMService:
     def build_rag_messages(
         self,
         query: str,
-        context_documents: List[Dict[str, Any]],
-        system_prompt: Optional[str],
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-    ) -> List[Dict[str, str]]:
+        context_documents: list[dict[str, Any]],
+        system_prompt: str | None,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> list[dict[str, str]]:
         prompt = system_prompt or (
             "You are a helpful assistant. Base every answer on the supplied context. "
             "If the context is insufficient, state that limitation explicitly."
         )
 
-        context_sections: List[str] = []
+        context_sections: list[str] = []
         for index, document in enumerate(context_documents, 1):
             source = document.get("source") or "Unknown"
             text = document.get("text") or ""
             context_sections.append(f"[Document {index} - {source}]\n{text}")
         context_block = "\n\n".join(context_sections)
 
-        conversation_lines: List[str] = []
+        conversation_lines: list[str] = []
         if conversation_history:
             for message in conversation_history:
                 role_value = message.get("role", "user")
@@ -334,7 +336,7 @@ class LLMService:
         if conversation_lines:
             conversation_block = "Conversation History:\n" + "\n".join(conversation_lines)
 
-        user_sections: List[str] = []
+        user_sections: list[str] = []
         if conversation_block:
             user_sections.append(conversation_block)
         user_sections.append(f"Question: {query}")
@@ -354,15 +356,15 @@ class LLMService:
         self,
         *,
         query: str,
-        context_documents: List[Dict[str, Any]],
-        provider: Optional[str],
-        model: Optional[str],
-        system_prompt: Optional[str],
+        context_documents: list[dict[str, Any]],
+        provider: str | None,
+        model: str | None,
+        system_prompt: str | None,
         temperature: float,
         max_tokens: int,
         stream: bool,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
-    ) -> Union[LLMResponse, AsyncGenerator[str, None]]:
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> LLMResponse | AsyncGenerator[str, None]:
         llm_provider = self.get_provider(provider)
         messages = self.build_rag_messages(query, context_documents, system_prompt, conversation_history)
 
@@ -387,14 +389,14 @@ class LLMService:
         self,
         *,
         prompt: str,
-        provider: Optional[str],
-        model: Optional[str],
-        system_prompt: Optional[str],
+        provider: str | None,
+        model: str | None,
+        system_prompt: str | None,
         temperature: float = 0.2,
         max_tokens: int = 400,
     ) -> LLMResponse:
         llm_provider = self.get_provider(provider)
-        messages: List[Dict[str, str]] = []
+        messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
@@ -407,10 +409,10 @@ class LLMService:
             max_tokens=max_tokens,
         )
 
-    def get_available_providers(self) -> List[str]:
+    def get_available_providers(self) -> list[str]:
         return list(self.providers.keys())
 
-    def get_provider_models(self, provider: str) -> List[str]:
+    def get_provider_models(self, provider: str) -> list[str]:
         if provider not in self.providers:
             return []
         return self.providers[provider].get_available_models()

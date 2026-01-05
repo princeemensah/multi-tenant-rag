@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,12 +12,12 @@ from app.models.task import IncidentSeverity, IncidentStatus, TaskPriority, Task
 
 class TaskBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=5000)
+    description: str | None = Field(default=None, max_length=5000)
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM)
-    tags: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
-    due_date: Optional[datetime] = None
-    assigned_to_id: Optional[UUID] = None
+    due_date: datetime | None = None
+    assigned_to_id: UUID | None = None
 
 
 class TaskCreate(TaskBase):
@@ -26,22 +25,22 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=5000)
-    status: Optional[TaskStatus] = None
-    priority: Optional[TaskPriority] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[dict] = None
-    due_date: Optional[datetime] = None
-    assigned_to_id: Optional[UUID] = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=5000)
+    status: TaskStatus | None = None
+    priority: TaskPriority | None = None
+    tags: list[str] | None = None
+    metadata: dict | None = None
+    due_date: datetime | None = None
+    assigned_to_id: UUID | None = None
 
 
 class TaskResponse(TaskBase):
     id: UUID
     tenant_id: UUID
     status: TaskStatus
-    created_by_id: Optional[UUID] = None
-    completed_at: Optional[datetime] = None
+    created_by_id: UUID | None = None
+    completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     metadata: dict = Field(
@@ -54,7 +53,7 @@ class TaskResponse(TaskBase):
 
 
 class TaskList(BaseModel):
-    tasks: List[TaskResponse]
+    tasks: list[TaskResponse]
     total: int
     page: int
     size: int
@@ -63,13 +62,13 @@ class TaskList(BaseModel):
 
 class IncidentBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=8000)
+    description: str | None = Field(default=None, max_length=8000)
     severity: IncidentSeverity = Field(default=IncidentSeverity.MEDIUM)
     status: IncidentStatus = Field(default=IncidentStatus.OPEN)
-    tags: List[str] = Field(default_factory=list)
-    impacted_systems: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    impacted_systems: list[str] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
-    summary: Optional[str] = Field(default=None, max_length=8000)
+    summary: str | None = Field(default=None, max_length=8000)
 
 
 class IncidentCreate(IncidentBase):
@@ -77,27 +76,27 @@ class IncidentCreate(IncidentBase):
 
 
 class IncidentUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    description: Optional[str] = Field(default=None, max_length=8000)
-    severity: Optional[IncidentSeverity] = None
-    status: Optional[IncidentStatus] = None
-    tags: Optional[List[str]] = None
-    impacted_systems: Optional[List[str]] = None
-    metadata: Optional[dict] = None
-    summary: Optional[str] = Field(default=None, max_length=8000)
-    acknowledged: Optional[bool] = None
-    mitigated: Optional[bool] = None
-    resolved: Optional[bool] = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=8000)
+    severity: IncidentSeverity | None = None
+    status: IncidentStatus | None = None
+    tags: list[str] | None = None
+    impacted_systems: list[str] | None = None
+    metadata: dict | None = None
+    summary: str | None = Field(default=None, max_length=8000)
+    acknowledged: bool | None = None
+    mitigated: bool | None = None
+    resolved: bool | None = None
 
 
 class IncidentResponse(IncidentBase):
     id: UUID
     tenant_id: UUID
-    reported_by_id: Optional[UUID] = None
+    reported_by_id: UUID | None = None
     detected_at: datetime
-    acknowledged_at: Optional[datetime] = None
-    mitigated_at: Optional[datetime] = None
-    resolved_at: Optional[datetime] = None
+    acknowledged_at: datetime | None = None
+    mitigated_at: datetime | None = None
+    resolved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     metadata: dict = Field(
@@ -110,7 +109,7 @@ class IncidentResponse(IncidentBase):
 
 
 class IncidentList(BaseModel):
-    incidents: List[IncidentResponse]
+    incidents: list[IncidentResponse]
     total: int
     page: int
     size: int
@@ -124,4 +123,4 @@ class IncidentSummary(BaseModel):
     resolved_incidents: int
     incidents_by_severity: dict
     incidents_by_status: dict
-    recent_incidents: List[IncidentResponse]
+    recent_incidents: list[IncidentResponse]

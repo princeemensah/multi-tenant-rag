@@ -1,9 +1,9 @@
 """Task management endpoints for tenant-scoped operations."""
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, HTTPException
 
 from app.dependencies import (
@@ -14,9 +14,6 @@ from app.dependencies import (
 )
 from app.models.task import TaskPriority, TaskStatus
 from app.schemas.task import TaskCreate, TaskList, TaskResponse, TaskUpdate
-
-import structlog
-
 
 logger = structlog.get_logger(__name__)
 
@@ -31,8 +28,8 @@ async def list_tasks(
     task_service: TaskServiceDep,
     skip: int = 0,
     limit: int = 20,
-    status: Optional[TaskStatus] = None,
-    priority: Optional[TaskPriority] = None,
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
 ):
     items, total = task_service.list_tasks(
         db=db,

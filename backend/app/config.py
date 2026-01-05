@@ -1,6 +1,5 @@
 """Application configuration using pydantic settings."""
 from functools import lru_cache
-from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,14 +15,14 @@ class Settings(BaseSettings):
 
     qdrant_host: str = Field(default="localhost", env="QDRANT_HOST")
     qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
-    qdrant_api_key: Optional[str] = Field(default=None, env="QDRANT_API_KEY")
+    qdrant_api_key: str | None = Field(default=None, env="QDRANT_API_KEY")
 
     jwt_secret_key: str = Field(env="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=30, env="JWT_EXPIRE_MINUTES")
 
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    openai_api_key: str | None = Field(default=None, env="OPENAI_API_KEY")
+    anthropic_api_key: str | None = Field(default=None, env="ANTHROPIC_API_KEY")
     default_llm_provider: str = Field(default="openai", env="DEFAULT_LLM_PROVIDER")
 
     embedding_model: str = Field(
@@ -32,13 +31,13 @@ class Settings(BaseSettings):
     )
     embedding_dimension: int = Field(default=384, env="EMBEDDING_DIMENSION")
 
-    allowed_hosts: Union[List[str], str] = Field(
+    allowed_hosts: list[str] | str = Field(
         default=["localhost", "127.0.0.1", "0.0.0.0"],
         env="ALLOWED_HOSTS",
     )
     max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
     upload_dir: str = Field(default="./uploads", env="UPLOAD_DIR")
-    allowed_file_types: Union[List[str], str] = Field(
+    allowed_file_types: list[str] | str = Field(
         default=["pdf", "txt", "docx"],
         env="ALLOWED_FILE_TYPES",
     )
@@ -81,7 +80,7 @@ class Settings(BaseSettings):
         return value
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     return Settings()
 
