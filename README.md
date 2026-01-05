@@ -1,11 +1,11 @@
 # Multi-Tenant RAG & Agentic Operations Assistant
 
-<div align="left">
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Built with: FastAPI + Next.js + Qdrant](https://img.shields.io/badge/Built%20with-FastAPI%20%2B%20Next.js%20%2B%20Qdrant-green.svg)
-
-</div>
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" /></a>
+  <img alt="Built with: FastAPI + Next.js + Qdrant" src="https://img.shields.io/badge/Built%20with-FastAPI%20%2B%20Next.js%20%2B%20Qdrant-green.svg" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue?logo=python&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript&logoColor=white" />
+</p>
 
 ---
 
@@ -14,7 +14,6 @@
 This repository shows a multi-tenant retrieval-augmented generation (RAG) pipeline, intent-aware agent orchestration, and guarded tool execution behind a FastAPI backend and Next.js frontend.
 
 ## 1. Architecture Overview
-
 ```
 User Query
 	│
@@ -28,7 +27,7 @@ User Query
 	│
 	├─► LLM Reasoning (structured prompts, guardrails, streaming events)
 	│
-	└─► Optional Agent Tool Invocation (tasks, documents, incidents)
+	└─► Agent Tool Invocation (tasks, documents, incidents)
 				│
 				└─► Response with citations + guardrail summary
 ```
@@ -164,46 +163,6 @@ make format-backend  # Ruff format
 make format-frontend # Next.js lint --fix
 ```
 
-## 8. Key Design Decisions
-
-### Retrieval Pipeline
-
-- Documents are chunked into windowed segments (default 512 tokens overlap 64) during ingestion.
-- Embeddings use MiniLM via `SentenceTransformerEmbeddingService` for cost-efficient semantic search.
-- Qdrant stores vectors with tenant, document type, created_at metadata to enable compound filtering.
-- Retrieval executes top-k semantic search with optional reranking (BM25 fallback and score-based pruning).
-
-### Multi-Tenant Isolation
-
-- Each request carries a tenant identifier resolved from auth/session middleware.
-- Database access relies on scoped sessions that inject tenant filters at the ORM layer.
-- Retriever queries include tenant metadata filters; cross-tenant results are structurally impossible.
-- Agent tools require tenant IDs explicitly, and data access is validated before execution.
-
-### Agent & Tooling
-
-- `IntentService` classifies requests into informational, analytical, action, or clarify buckets.
-- Planner decides whether to call tools such as `get_open_tasks`, `create_task`, `summarize_incidents`.
-- Tool invocation happens via structured payloads with validation; failures are caught and surfaced to the LLM so it can recover gracefully.
-- Responses include citations to retrieved context and a guardrail summary detailing actions taken.
-
-### Evaluation & Guardrails
-
-- Retrieval evaluation script (`python -m app.scripts.evaluate_retrieval`) reports hit rate and recall on sample queries.
-- Conversations persist telemetry (model, latency, cost, guardrail warnings) for offline analysis.
-- Guardrail service checks context length, content type, and tool call outcomes before completing a response.
-
-### Observability
-
-- `structlog` provides JSON logs with trace IDs across the request lifecycle.
-- Server-sent events stream reasoning steps, retrieved chunks, tool invocations, and guardrail messages to the UI for transparency.
-
-## 9. Troubleshooting
-
-- **Docker DNS failures**: Configure Wi-Fi DNS as described in section 4.4 and restart Docker Desktop.
-- **Port 3000 in use**: Stop any local Next.js dev server (`yarn dev`) before running the frontend container.
-- **Stale volumes**: `docker compose down -v` removes Postgres/Qdrant data if you need a clean environment.
-
-## 10. License
+## 9. License
 
 Released under the MIT License (see `LICENSE`).
