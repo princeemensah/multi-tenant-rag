@@ -66,6 +66,12 @@ class AgentExecution(BaseModel):
     action: Optional[AgentAction] = None
 
 
+class AgentGuardrailReport(BaseModel):
+    warnings: List[str] = Field(default_factory=list)
+    has_warnings: bool = False
+    info: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentMessage(BaseModel):
     role: str
     content: str
@@ -84,3 +90,4 @@ class AgentRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     execution: AgentExecution
+    guardrails: Optional[AgentGuardrailReport] = None

@@ -1,4 +1,4 @@
-# Multi-Tenant AI Operations Assistant
+# Multi-Tenant RAG & Agentic Operations Assistant
 
 This repository hosts the implementation for a multi-tenant AI Operations Assistant that combines Retrieval-Augmented Generation (RAG), intent classification, and agentic tool execution. The goal is to provide tenant-isolated knowledge retrieval alongside actionable workflows (e.g., task management) while maintaining observability and guardrails.
 
