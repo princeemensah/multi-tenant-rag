@@ -1,6 +1,6 @@
 """FastAPI dependency helpers."""
 from functools import lru_cache
-from typing import Optional, Annotated
+from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.tenant import Tenant, TenantUser
-from app.services.auth_service import AuthService
 from app.services.agent_service import AgentService
+from app.services.auth_service import AuthService
 from app.services.cache_service import CacheService
 from app.services.conversation_service import ConversationService
 from app.services.document_service import DocumentService
@@ -24,7 +24,7 @@ from app.services.vector_service import QdrantVectorService
 security = HTTPBearer(auto_error=False)
 
 
-@lru_cache()
+@lru_cache
 def _cached_auth_service() -> AuthService:
     return AuthService()
 
@@ -33,7 +33,7 @@ def get_auth_service() -> AuthService:
     return _cached_auth_service()
 
 
-@lru_cache()
+@lru_cache
 def _cached_tenant_service() -> TenantService:
     return TenantService()
 
@@ -50,7 +50,7 @@ def get_vector_service() -> QdrantVectorService:
     return QdrantVectorService()
 
 
-@lru_cache()
+@lru_cache
 def _cached_llm_service() -> LLMService:
     return LLMService()
 
@@ -71,7 +71,7 @@ def get_incident_service() -> IncidentService:
     return IncidentService()
 
 
-@lru_cache()
+@lru_cache
 def _cached_cache_service() -> CacheService:
     return CacheService()
 
@@ -80,7 +80,7 @@ def get_cache_service() -> CacheService:
     return _cached_cache_service()
 
 
-@lru_cache()
+@lru_cache
 def _cached_rerank_service() -> RerankService:
     return RerankService()
 
@@ -126,7 +126,7 @@ def get_conversation_service() -> ConversationService:
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> TenantUser:
@@ -166,10 +166,10 @@ async def get_current_tenant(
 
 
 async def resolve_tenant_from_header(
-    x_tenant_id: Optional[str] = Header(None),
+    x_tenant_id: str | None = Header(None),
     db: Session = Depends(get_db),
     tenant_service: TenantService = Depends(get_tenant_service),
-) -> Optional[Tenant]:
+) -> Tenant | None:
     if not x_tenant_id:
         return None
 
@@ -186,7 +186,7 @@ async def resolve_tenant_from_subdomain(
     request: Request,
     db: Session = Depends(get_db),
     tenant_service: TenantService = Depends(get_tenant_service),
-) -> Optional[Tenant]:
+) -> Tenant | None:
     host = request.headers.get("host", "")
     parts = host.split(".")
     if len(parts) < 3:

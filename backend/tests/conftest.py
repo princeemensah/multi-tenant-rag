@@ -7,10 +7,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-
-from sqlalchemy.dialects.postgresql import JSONB
 
 
 @compiles(JSONB, "sqlite")

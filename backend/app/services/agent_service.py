@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -26,9 +26,9 @@ from app.services.embedding_service import EmbeddingService
 from app.services.intent_service import IntentClassifier, IntentResult, IntentType
 from app.services.llm_service import LLMService
 from app.services.prompt_template_service import PromptTemplateService
+from app.services.retrieval_service import RetrievalService
 from app.services.task_service import IncidentService, TaskService
 from app.services.vector_service import QdrantVectorService
-from app.services.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +38,12 @@ class AgentService:
 
     def __init__(
         self,
-        llm_service: Optional[LLMService] = None,
-        embedding_service: Optional[EmbeddingService] = None,
-        vector_service: Optional[QdrantVectorService] = None,
-        task_service: Optional[TaskService] = None,
-        incident_service: Optional[IncidentService] = None,
-        retrieval_service: Optional[RetrievalService] = None,
+        llm_service: LLMService | None = None,
+        embedding_service: EmbeddingService | None = None,
+        vector_service: QdrantVectorService | None = None,
+        task_service: TaskService | None = None,
+        incident_service: IncidentService | None = None,
+        retrieval_service: RetrievalService | None = None,
     ) -> None:
         self.llm_service = llm_service or LLMService()
         self.embedding_service = embedding_service or EmbeddingService()
@@ -56,7 +56,7 @@ class AgentService:
     def _apply_conversation_context(
         self,
         query: str,
-        conversation: Optional[List[AgentMessage]],
+        conversation: list[AgentMessage] | None,
     ) -> str:
         if not conversation:
             return query
@@ -71,9 +71,9 @@ class AgentService:
         tenant_id: UUID,
         user_id: UUID,
         query: str,
-        llm_provider: Optional[str] = None,
-        llm_model: Optional[str] = None,
-        conversation: Optional[List[AgentMessage]] = None,
+        llm_provider: str | None = None,
+        llm_model: str | None = None,
+        conversation: list[AgentMessage] | None = None,
         strategy: AgentStrategy = AgentStrategy.DIRECT,
         max_chunks: int = 4,
         score_threshold: float = 0.35,
@@ -132,27 +132,27 @@ class AgentService:
         *,
         query: str,
         tenant_id: UUID,
-        provider: Optional[str],
-        model: Optional[str],
+        provider: str | None,
+        model: str | None,
         max_chunks: int,
         score_threshold: float,
         strategy: AgentStrategy,
     ) -> AgentResult:
         effective_strategy = strategy
-        recorded_subqueries: List[str] = []
-        subqueries: List[str] = []
+        recorded_subqueries: list[str] = []
+        subqueries: list[str] = []
 
-        context_map: Dict[str, ContextSnippet] = {}
-        trace_map: Dict[str, Dict[str, ContextSnippet]] = {}
+        context_map: dict[str, ContextSnippet] = {}
+        trace_map: dict[str, dict[str, ContextSnippet]] = {}
 
-        def ingest_contexts(items: List[ContextSnippet]) -> None:
+        def ingest_contexts(items: list[ContextSnippet]) -> None:
             for ctx in items:
                 key = f"{ctx.document_id}:{ctx.chunk_id}"
                 existing = context_map.get(key)
                 if not existing or ctx.score > existing.score:
                     context_map[key] = ctx
 
-        def record_trace(label: str, items: List[ContextSnippet]) -> None:
+        def record_trace(label: str, items: list[ContextSnippet]) -> None:
             if not items:
                 return
             bucket = trace_map.setdefault(label, {})
@@ -252,9 +252,9 @@ class AgentService:
         )
 
     @staticmethod
-    def _deduplicate_subqueries(candidates: List[str]) -> List[str]:
-        ordered: List[str] = []
-        seen: Dict[str, bool] = {}
+    def _deduplicate_subqueries(candidates: list[str]) -> list[str]:
+        ordered: list[str] = []
+        seen: dict[str, bool] = {}
         for candidate in candidates:
             normalized = candidate.strip()
             if not normalized:
@@ -268,20 +268,20 @@ class AgentService:
 
     @staticmethod
     def _build_traces(
-        recorded_subqueries: List[str],
-        subqueries: List[str],
-        trace_map: Dict[str, Dict[str, ContextSnippet]],
+        recorded_subqueries: list[str],
+        subqueries: list[str],
+        trace_map: dict[str, dict[str, ContextSnippet]],
         original_query: str,
         strategy: AgentStrategy,
-    ) -> List[AgentTrace]:
-        labels: List[str] = []
+    ) -> list[AgentTrace]:
+        labels: list[str] = []
         if strategy == AgentStrategy.DIRECT:
             labels.append(original_query)
         labels.extend(recorded_subqueries)
         labels.extend(subqueries)
 
-        traces: List[AgentTrace] = []
-        seen_labels: Dict[str, bool] = {}
+        traces: list[AgentTrace] = []
+        seen_labels: dict[str, bool] = {}
         for label in labels:
             normalized = label.strip()
             if not normalized or normalized in seen_labels:
@@ -295,13 +295,13 @@ class AgentService:
     async def _generate_subqueries(
         self,
         query: str,
-        provider: Optional[str],
-        model: Optional[str],
+        provider: str | None,
+        model: str | None,
         *,
         informed: bool = False,
         initial_summary: str = "",
         context_snippets: str = "",
-    ) -> List[str]:
+    ) -> list[str]:
         if informed:
             prompt = PromptTemplateService.decomposition_prompt(
                 query,
@@ -334,7 +334,7 @@ class AgentService:
         tenant_id: UUID,
         max_chunks: int,
         score_threshold: float,
-    ) -> List[ContextSnippet]:
+    ) -> list[ContextSnippet]:
         if self.retrieval_service:
             search_results = await self.retrieval_service.search_documents(
                 tenant_id=str(tenant_id),
@@ -348,7 +348,7 @@ class AgentService:
             if not isinstance(embedding, list):
                 raise RuntimeError("Embedding service returned unexpected format")
 
-            vector: List[float]
+            vector: list[float]
             if embedding and isinstance(embedding[0], list):  # type: ignore[index]
                 vector = embedding[0]  # type: ignore[assignment]
             else:
@@ -362,7 +362,7 @@ class AgentService:
             )
             items = search_results.items
 
-        contexts: List[ContextSnippet] = []
+        contexts: list[ContextSnippet] = []
         for item in items:
             contexts.append(
                 ContextSnippet(
@@ -383,8 +383,8 @@ class AgentService:
         user_id: UUID,
         query: str,
         intent: IntentResult,
-        provider: Optional[str],
-        model: Optional[str],
+        provider: str | None,
+        model: str | None,
     ) -> AgentAction:
         plan_prompt = PromptTemplateService.action_planner_prompt(query)
         plan_response = await self.llm_service.generate_text_response(
@@ -404,14 +404,14 @@ class AgentService:
             plan=plan,
         )
 
-    def _parse_action_plan(self, payload: str) -> Dict[str, Any]:
+    def _parse_action_plan(self, payload: str) -> dict[str, Any]:
         try:
             return json.loads(payload)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
             stripped = payload.strip()
             if stripped.startswith("{") and stripped.endswith("}"):
                 return json.loads(stripped)
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to interpret action plan")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to interpret action plan") from exc
 
     async def _execute_action(
         self,
@@ -419,7 +419,7 @@ class AgentService:
         db: Session,
         tenant_id: UUID,
         user_id: UUID,
-        plan: Dict[str, Any],
+        plan: dict[str, Any],
     ) -> AgentAction:
         tool = str(plan.get("tool", "none")).strip().lower()
         arguments = plan.get("arguments") or {}
@@ -442,7 +442,7 @@ class AgentService:
         db: Session,
         tenant_id: UUID,
         user_id: UUID,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> AgentToolResult:
         title = str(args.get("title") or "").strip()
         if not title:
@@ -508,7 +508,7 @@ class AgentService:
         self,
         db: Session,
         tenant_id: UUID,
-        args: Dict[str, Any],
+        args: dict[str, Any],
     ) -> AgentToolResult:
         timeframe = args.get("timeframe_days")
         days = int(timeframe) if isinstance(timeframe, int) else 7

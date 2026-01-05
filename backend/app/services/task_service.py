@@ -2,18 +2,23 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.models.task import Incident, IncidentSeverity, IncidentStatus, Task, TaskPriority, TaskStatus
+from app.models.task import (
+    Incident,
+    IncidentSeverity,
+    IncidentStatus,
+    Task,
+    TaskPriority,
+    TaskStatus,
+)
 from app.models.tenant import TenantUser
-
-import structlog
-
 
 logger = structlog.get_logger(__name__)
 
@@ -27,9 +32,9 @@ class TaskService:
         tenant_id: UUID,
         skip: int = 0,
         limit: int = 20,
-        status_filter: Optional[TaskStatus] = None,
-        priority_filter: Optional[TaskPriority] = None,
-    ) -> Tuple[List[Task], int]:
+        status_filter: TaskStatus | None = None,
+        priority_filter: TaskPriority | None = None,
+    ) -> tuple[list[Task], int]:
         query = db.query(Task).filter(Task.tenant_id == tenant_id)
 
         if status_filter:
@@ -60,14 +65,14 @@ class TaskService:
         self,
         db: Session,
         tenant_id: UUID,
-        creator_id: Optional[UUID],
+        creator_id: UUID | None,
         title: str,
-        description: Optional[str],
+        description: str | None,
         priority: TaskPriority,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        due_date: Optional[datetime],
-        assigned_to_id: Optional[UUID],
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
+        due_date: datetime | None,
+        assigned_to_id: UUID | None,
     ) -> Task:
         if assigned_to_id:
             assignee = (
@@ -104,7 +109,7 @@ class TaskService:
         db: Session,
         tenant_id: UUID,
         task_id: UUID,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
     ) -> Task:
         record = self.get_task(db, tenant_id, task_id)
 
@@ -155,9 +160,9 @@ class IncidentService:
         tenant_id: UUID,
         skip: int = 0,
         limit: int = 20,
-        severity_filter: Optional[IncidentSeverity] = None,
-        status_filter: Optional[IncidentStatus] = None,
-    ) -> Tuple[List[Incident], int]:
+        severity_filter: IncidentSeverity | None = None,
+        status_filter: IncidentStatus | None = None,
+    ) -> tuple[list[Incident], int]:
         query = db.query(Incident).filter(Incident.tenant_id == tenant_id)
 
         if severity_filter:
@@ -188,15 +193,15 @@ class IncidentService:
         self,
         db: Session,
         tenant_id: UUID,
-        reporter_id: Optional[UUID],
+        reporter_id: UUID | None,
         title: str,
-        description: Optional[str],
+        description: str | None,
         severity: IncidentSeverity,
         status_value: IncidentStatus,
-        tags: Optional[List[str]],
-        impacted_systems: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        summary: Optional[str],
+        tags: list[str] | None,
+        impacted_systems: list[str] | None,
+        metadata: dict[str, Any] | None,
+        summary: str | None,
     ) -> Incident:
         record = Incident(
             tenant_id=tenant_id,
@@ -221,7 +226,7 @@ class IncidentService:
         db: Session,
         tenant_id: UUID,
         incident_id: UUID,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
     ) -> Incident:
         record = self.get_incident(db, tenant_id, incident_id)
 
@@ -266,7 +271,7 @@ class IncidentService:
         db: Session,
         tenant_id: UUID,
         timeframe_days: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         cutoff = datetime.now(UTC) - timedelta(days=max(timeframe_days, 1))
 
         incidents = (
@@ -276,8 +281,8 @@ class IncidentService:
             .all()
         )
 
-        totals_by_severity: Dict[str, int] = {}
-        totals_by_status: Dict[str, int] = {}
+        totals_by_severity: dict[str, int] = {}
+        totals_by_status: dict[str, int] = {}
         open_count = 0
         resolved_count = 0
 

@@ -1,6 +1,6 @@
 """Tenant management service."""
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_
@@ -17,7 +17,7 @@ class TenantService:
         self,
         db: Session,
         name: str,
-        subdomain: Optional[str] = None,
+        subdomain: str | None = None,
         llm_provider: str = "openai",
         llm_model: str = "gpt-4o-mini",
     ) -> Tenant:
@@ -41,7 +41,7 @@ class TenantService:
         db.refresh(tenant)
         return tenant
 
-    def get_tenant_by_id(self, db: Session, tenant_id: str) -> Optional[Tenant]:
+    def get_tenant_by_id(self, db: Session, tenant_id: str) -> Tenant | None:
         try:
             resolved_tenant_id = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
         except (ValueError, TypeError):
@@ -53,14 +53,14 @@ class TenantService:
             .first()
         )
 
-    def get_tenant_by_subdomain(self, db: Session, subdomain: str) -> Optional[Tenant]:
+    def get_tenant_by_subdomain(self, db: Session, subdomain: str) -> Tenant | None:
         return (
             db.query(Tenant)
             .filter(and_(Tenant.subdomain == subdomain, Tenant.is_active.is_(True)))
             .first()
         )
 
-    def get_tenant_by_identifier(self, db: Session, identifier: str) -> Optional[Tenant]:
+    def get_tenant_by_identifier(self, db: Session, identifier: str) -> Tenant | None:
         try:
             tenant_uuid = uuid.UUID(identifier)
             return self.get_tenant_by_id(db, str(tenant_uuid))
@@ -73,13 +73,13 @@ class TenantService:
         skip: int = 0,
         limit: int = 100,
         active_only: bool = True,
-    ) -> List[Tenant]:
+    ) -> list[Tenant]:
         query = db.query(Tenant)
         if active_only:
             query = query.filter(Tenant.is_active.is_(True))
         return query.offset(skip).limit(limit).all()
 
-    def update_tenant(self, db: Session, tenant_id: str, updates: Dict[str, Any]) -> Tenant:
+    def update_tenant(self, db: Session, tenant_id: str, updates: dict[str, Any]) -> Tenant:
         tenant = self.get_tenant_by_id(db, tenant_id)
         if not tenant:
             raise HTTPException(
@@ -114,7 +114,7 @@ class TenantService:
         db.commit()
         return True
 
-    def get_tenant_stats(self, db: Session, tenant_id: str) -> Dict[str, Any]:
+    def get_tenant_stats(self, db: Session, tenant_id: str) -> dict[str, Any]:
         tenant = self.get_tenant_by_id(db, tenant_id)
         if not tenant:
             raise HTTPException(
@@ -156,7 +156,7 @@ class TenantService:
         db: Session,
         tenant_id: str,
         quota_type: str,
-        current_count: Optional[int] = None,
+        current_count: int | None = None,
     ) -> bool:
         tenant = self.get_tenant_by_id(db, tenant_id)
         if not tenant:

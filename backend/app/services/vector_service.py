@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 class VectorSearchResults:
     """Normalized shape for vector search responses."""
 
-    items: List[Dict[str, Any]]
-    next_offset: Optional[int] = None
+    items: list[dict[str, Any]]
+    next_offset: int | None = None
     has_more: bool = False
 
-    def to_payload(self) -> Dict[str, Any]:
+    def to_payload(self) -> dict[str, Any]:
         return {
             "items": self.items,
             "next_offset": self.next_offset,
@@ -40,7 +40,7 @@ class VectorSearchResults:
         }
 
     @classmethod
-    def from_payload(cls, payload: Dict[str, Any]) -> "VectorSearchResults":
+    def from_payload(cls, payload: dict[str, Any]) -> VectorSearchResults:
         return cls(
             items=list(payload.get("items", [])),
             next_offset=payload.get("next_offset"),
@@ -60,11 +60,11 @@ class QdrantVectorService:
         self.client = QdrantClient(**common_kwargs)
         self.async_client = AsyncQdrantClient(**common_kwargs)
 
-    def _build_client_kwargs(self) -> Dict[str, Any]:
+    def _build_client_kwargs(self) -> dict[str, Any]:
         """Construct client keyword arguments supporting host or full URL values."""
 
         host_value = (settings.qdrant_host or "").strip()
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "api_key": settings.qdrant_api_key,
             "timeout": 30.0,
             "prefer_grpc": False,
@@ -80,7 +80,7 @@ class QdrantVectorService:
 
         return kwargs
 
-    async def init_collection(self, collection_name: Optional[str] = None) -> bool:
+    async def init_collection(self, collection_name: str | None = None) -> bool:
         collection = collection_name or self.default_collection
         try:
             collections = await self.async_client.get_collections()
@@ -118,14 +118,14 @@ class QdrantVectorService:
     async def add_documents(
         self,
         tenant_id: str,
-        documents: List[Dict[str, Any]],
-        collection_name: Optional[str] = None,
+        documents: list[dict[str, Any]],
+        collection_name: str | None = None,
     ) -> bool:
         collection = collection_name or self.default_collection
         if not documents:
             return True
 
-        points: List[PointStruct] = []
+        points: list[PointStruct] = []
         for doc in documents:
             payload = dict(doc.get("metadata", {}))
             payload.update(
@@ -159,11 +159,11 @@ class QdrantVectorService:
     async def search_documents(
         self,
         tenant_id: str,
-        query_embedding: List[float],
+        query_embedding: list[float],
         limit: int = 10,
         score_threshold: float = 0.7,
-        filter_conditions: Optional[Dict[str, Any]] = None,
-        collection_name: Optional[str] = None,
+        filter_conditions: dict[str, Any] | None = None,
+        collection_name: str | None = None,
         offset: int = 0,
     ) -> VectorSearchResults:
         collection = collection_name or self.default_collection
@@ -174,7 +174,7 @@ class QdrantVectorService:
                 if isinstance(value, list):
                     conditions.append(FieldCondition(key=key, match=MatchAny(any=value)))
                 elif isinstance(value, dict):
-                    range_kwargs: Dict[str, float] = {}
+                    range_kwargs: dict[str, float] = {}
                     gte = value.get("gte")
                     lte = value.get("lte")
                     if gte is not None:
@@ -204,7 +204,7 @@ class QdrantVectorService:
                 with_vectors=False,
             )
 
-            formatted: List[Dict[str, Any]] = []
+            formatted: list[dict[str, Any]] = []
             for item in results[:page_size]:
                 payload = item.payload or {}
                 formatted.append(
@@ -243,7 +243,7 @@ class QdrantVectorService:
         self,
         tenant_id: str,
         document_id: str,
-        collection_name: Optional[str] = None,
+        collection_name: str | None = None,
     ) -> bool:
         collection = collection_name or self.default_collection
 
@@ -262,7 +262,7 @@ class QdrantVectorService:
             logger.error("Failed to delete document vectors", extra={"error": str(exc)})
             return False
 
-    async def delete_tenant_data(self, tenant_id: str, collection_name: Optional[str] = None) -> bool:
+    async def delete_tenant_data(self, tenant_id: str, collection_name: str | None = None) -> bool:
         collection = collection_name or self.default_collection
         delete_filter = Filter(must=[FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id))])
         try:
@@ -273,7 +273,7 @@ class QdrantVectorService:
             logger.error("Failed to purge tenant vectors", extra={"error": str(exc)})
             return False
 
-    async def get_collection_info(self, collection_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def get_collection_info(self, collection_name: str | None = None) -> dict[str, Any] | None:
         collection = collection_name or self.default_collection
         try:
             info = await self.async_client.get_collection(collection)

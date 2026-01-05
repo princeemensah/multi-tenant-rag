@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import re
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,9 +22,9 @@ class IntentResult(BaseModel):
     intent: IntentType
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = ""
-    entities: List[str] = Field(default_factory=list)
-    requested_action: Optional[str] = None
-    raw_response: Optional[str] = None
+    entities: list[str] = Field(default_factory=list)
+    requested_action: str | None = None
+    raw_response: str | None = None
 
 
 class IntentClassifier:
@@ -38,8 +37,8 @@ class IntentClassifier:
         self,
         query: str,
         *,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> IntentResult:
         prompt = PromptTemplateService.intent_prompt(query)
         system_prompt = (
@@ -66,7 +65,7 @@ class IntentClassifier:
 
         return self._heuristic_fallback(query)
 
-    def _parse_response(self, payload: str) -> Optional[IntentResult]:
+    def _parse_response(self, payload: str) -> IntentResult | None:
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
@@ -88,7 +87,7 @@ class IntentClassifier:
         confidence = float(data.get("confidence", 0.5))
         confidence = max(0.0, min(confidence, 1.0))
         reasoning = str(data.get("reasoning", "")).strip()
-        entities: List[str] = []
+        entities: list[str] = []
         raw_entities = data.get("entities", [])
         if isinstance(raw_entities, list):
             entities = [str(item).strip() for item in raw_entities if str(item).strip()]

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -13,8 +13,8 @@ from app.services.conversation_service import ConversationService
 class _FakeLLMResponse:
     def __init__(self, content: str) -> None:
         self.content = content
-        self.usage: Dict[str, int] = {}
-        self.metadata: Dict[str, Any] = {}
+        self.usage: dict[str, int] = {}
+        self.metadata: dict[str, Any] = {}
 
 
 class _FakeLLMService:

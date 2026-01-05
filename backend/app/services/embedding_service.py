@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from typing import Dict, List, Union
 
 from app.config import settings
 
@@ -53,16 +52,16 @@ class EmbeddingService:
 
     async def embed_text(
         self,
-        text: Union[str, List[str]],
+        text: str | list[str],
         provider: str = "local",
-    ) -> Union[List[float], List[List[float]]]:
+    ) -> list[float] | list[list[float]]:
         single = isinstance(text, str)
         texts = [text] if single else list(text)
 
         if not texts:
             return [] if single else []
 
-        embeddings: List[List[float]]
+        embeddings: list[list[float]]
         try:
             if provider == "openai" and self._openai_client is not None:
                 embeddings = await self._embed_with_openai(texts)
@@ -74,16 +73,16 @@ class EmbeddingService:
 
         return embeddings[0] if single else embeddings
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         return await self.embed_text(texts)  # type: ignore[return-value]
 
-    async def _embed_with_local_model(self, texts: List[str]) -> List[List[float]]:
+    async def _embed_with_local_model(self, texts: list[str]) -> list[list[float]]:
         if not self._local_model:
             return self._fallback_embeddings(texts)
 
         loop = asyncio.get_running_loop()
 
-        def _encode() -> List[List[float]]:
+        def _encode() -> list[list[float]]:
             vectors = self._local_model.encode(  # type: ignore[union-attr]
                 texts,
                 convert_to_tensor=False,
@@ -93,7 +92,7 @@ class EmbeddingService:
 
         return await loop.run_in_executor(None, _encode)
 
-    async def _embed_with_openai(self, texts: List[str]) -> List[List[float]]:
+    async def _embed_with_openai(self, texts: list[str]) -> list[list[float]]:
         if not self._openai_client:
             raise RuntimeError("OpenAI client not configured")
 
@@ -103,8 +102,8 @@ class EmbeddingService:
         )
         return [list(item.embedding) for item in response.data]
 
-    def _fallback_embeddings(self, texts: List[str]) -> List[List[float]]:
-        vectors: List[List[float]] = []
+    def _fallback_embeddings(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
         dim = max(1, self.dimension)
 
         for text in texts:
@@ -125,7 +124,7 @@ class EmbeddingService:
         text: str,
         max_chunk_size: int = 512,
         overlap_size: int = 50,
-    ) -> List[Dict[str, Union[int, str]]]:
+    ) -> list[dict[str, int | str]]:
         if not text:
             return []
 
@@ -140,7 +139,7 @@ class EmbeddingService:
                 }
             ]
 
-        chunks: List[Dict[str, Union[int, str]]] = []
+        chunks: list[dict[str, int | str]] = []
         start = 0
         chunk_index = 0
         length = len(text)
@@ -173,17 +172,17 @@ class EmbeddingService:
 
     async def embed_document_chunks(
         self,
-        chunks: List[Dict[str, Union[int, str]]],
+        chunks: list[dict[str, int | str]],
         provider: str = "local",
-    ) -> List[Dict[str, Union[int, str, List[float]]]]:
+    ) -> list[dict[str, int | str | list[float]]]:
         if not chunks:
             return []
 
         texts = [str(chunk["text"]) for chunk in chunks]
         embeddings = await self.embed_text(texts, provider)
 
-        enriched: List[Dict[str, Union[int, str, List[float]]]] = []
-        for chunk, vector in zip(chunks, embeddings):
+        enriched: list[dict[str, int | str | list[float]]] = []
+        for chunk, vector in zip(chunks, embeddings, strict=False):
             enriched.append(
                 {
                     **chunk,
@@ -194,8 +193,8 @@ class EmbeddingService:
             )
         return enriched
 
-    def calculate_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
-        dot = sum(a * b for a, b in zip(embedding1, embedding2))
+    def calculate_similarity(self, embedding1: list[float], embedding2: list[float]) -> float:
+        dot = sum(a * b for a, b in zip(embedding1, embedding2, strict=False))
         norm1 = math.sqrt(sum(a * a for a in embedding1))
         norm2 = math.sqrt(sum(b * b for b in embedding2))
         if not norm1 or not norm2:

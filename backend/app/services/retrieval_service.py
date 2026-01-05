@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from app.services.cache_service import CacheService
 from app.services.embedding_service import EmbeddingService
@@ -18,10 +18,10 @@ class RetrievalService:
     def __init__(
         self,
         *,
-        embedding_service: Optional[EmbeddingService] = None,
-        vector_service: Optional[QdrantVectorService] = None,
-        cache_service: Optional[CacheService] = None,
-        rerank_service: Optional[RerankService] = None,
+        embedding_service: EmbeddingService | None = None,
+        vector_service: QdrantVectorService | None = None,
+        cache_service: CacheService | None = None,
+        rerank_service: RerankService | None = None,
     ) -> None:
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_service = vector_service or QdrantVectorService()
@@ -35,13 +35,13 @@ class RetrievalService:
         query: str,
         limit: int = 10,
         score_threshold: float = 0.3,
-        filter_conditions: Optional[Dict[str, Any]] = None,
+        filter_conditions: dict[str, Any] | None = None,
         offset: int = 0,
         use_cache: bool = True,
         rerank: bool = True,
     ) -> VectorSearchResults:
-        cache_key: Optional[str] = None
-        cache_payload: Optional[Dict[str, Any]] = None
+        cache_key: str | None = None
+        cache_payload: dict[str, Any] | None = None
         filters = filter_conditions or {}
         if (
             use_cache
@@ -84,7 +84,7 @@ class RetrievalService:
         query: str,
         limit: int,
         score_threshold: float,
-        filters: Dict[str, Any],
+        filters: dict[str, Any],
     ) -> str:
         serialised_filters = self._serialise_filters(filters)
         return "|".join(
@@ -98,10 +98,10 @@ class RetrievalService:
             ]
         )
 
-    def _serialise_filters(self, filters: Dict[str, Any]) -> str:
+    def _serialise_filters(self, filters: dict[str, Any]) -> str:
         if not filters:
             return "*"
-        normalised: Dict[str, Any] = {}
+        normalised: dict[str, Any] = {}
         for key, value in sorted(filters.items()):
             if isinstance(value, list):
                 normalised[key] = sorted(str(item) for item in value)

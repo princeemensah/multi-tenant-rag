@@ -1,9 +1,9 @@
 """Conversation persistence and retrieval utilities."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
@@ -12,16 +12,13 @@ from app.models.conversation import ConversationMessage, ConversationSession
 from app.services.llm_service import LLMService
 from app.services.prompt_template_service import PromptTemplateService
 
-import structlog
-
-
 logger = structlog.get_logger(__name__)
 
 
 class ConversationService:
     """Manage conversation sessions and messages for tenants."""
 
-    def __init__(self, llm_service: Optional[LLMService] = None) -> None:
+    def __init__(self, llm_service: LLMService | None = None) -> None:
         self.llm_service = llm_service or LLMService()
 
     # ------------------------------------------------------------------
@@ -34,7 +31,7 @@ class ConversationService:
         *,
         limit: int = 20,
         skip: int = 0,
-    ) -> Tuple[List[ConversationSession], int]:
+    ) -> tuple[list[ConversationSession], int]:
         total = (
             db.query(func.count(ConversationSession.id))
             .filter(ConversationSession.tenant_id == tenant_id)
@@ -54,7 +51,7 @@ class ConversationService:
         db: Session,
         tenant_id: UUID,
         session_id: UUID,
-    ) -> Optional[ConversationSession]:
+    ) -> ConversationSession | None:
         return (
             db.query(ConversationSession)
             .filter(
@@ -71,8 +68,8 @@ class ConversationService:
         db: Session,
         tenant_id: UUID,
         *,
-        created_by_id: Optional[UUID],
-        title: Optional[str] = None,
+        created_by_id: UUID | None,
+        title: str | None = None,
     ) -> ConversationSession:
         session = ConversationSession(
             tenant_id=tenant_id,
@@ -122,8 +119,8 @@ class ConversationService:
         *,
         role: str,
         content: str,
-        author_id: Optional[UUID],
-        metadata: Optional[Dict[str, object]] = None,
+        author_id: UUID | None,
+        metadata: dict[str, object] | None = None,
     ) -> ConversationMessage:
         session = self._require_session(db, tenant_id, session_id)
         next_sequence = session.message_count + 1
@@ -156,8 +153,8 @@ class ConversationService:
         session_id: UUID,
         *,
         limit: int = 50,
-        before_sequence: Optional[int] = None,
-    ) -> List[ConversationMessage]:
+        before_sequence: int | None = None,
+    ) -> list[ConversationMessage]:
         session = self._require_session(db, tenant_id, session_id)
         query = (
             db.query(ConversationMessage)
@@ -181,7 +178,7 @@ class ConversationService:
         session_id: UUID,
         *,
         limit: int = 10,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         messages = self.list_messages(db, tenant_id, session_id, limit=limit)
         return [
             {
@@ -199,7 +196,7 @@ class ConversationService:
         db: Session,
         tenant_id: UUID,
         session_id: UUID,
-    ) -> Optional[str]:
+    ) -> str | None:
         session = self._require_session(db, tenant_id, session_id)
         first_messages = self.list_messages(db, tenant_id, session_id, limit=2)
         user_message = next((msg for msg in first_messages if msg.role == "user"), None)

@@ -4,7 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, status
@@ -31,12 +32,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
 
-def _sse_event(payload: Dict[str, Any]) -> str:
+def _sse_event(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-def _convert_history(raw_history: List[Dict[str, Any]]) -> List[AgentMessage]:
-    history: List[AgentMessage] = []
+def _convert_history(raw_history: list[dict[str, Any]]) -> list[AgentMessage]:
+    history: list[AgentMessage] = []
     for entry in raw_history:
         role = str(entry.get("role", "user")).strip() or "user"
         content = str(entry.get("content", "")).strip()
@@ -47,8 +48,8 @@ def _convert_history(raw_history: List[Dict[str, Any]]) -> List[AgentMessage]:
 
 
 def _build_guardrail_report(execution: AgentExecution) -> AgentGuardrailReport:
-    warnings: List[str] = []
-    info: Dict[str, Any] = {
+    warnings: list[str] = []
+    info: dict[str, Any] = {
         "intent": execution.intent.intent.value,
         "intent_confidence": execution.intent.confidence,
         "strategy": execution.result.strategy.value,
@@ -56,7 +57,7 @@ def _build_guardrail_report(execution: AgentExecution) -> AgentGuardrailReport:
         "context_count": len(execution.result.contexts),
     }
 
-    sources: List[str] = []
+    sources: list[str] = []
     for context in execution.result.contexts:
         if context.source and context.source not in sources:
             sources.append(context.source)
@@ -77,8 +78,8 @@ def _build_guardrail_report(execution: AgentExecution) -> AgentGuardrailReport:
     return AgentGuardrailReport(warnings=warnings, has_warnings=bool(warnings), info=info)
 
 
-def _serialise_contexts(execution: AgentExecution) -> List[Dict[str, Any]]:
-    serialised: List[Dict[str, Any]] = []
+def _serialise_contexts(execution: AgentExecution) -> list[dict[str, Any]]:
+    serialised: list[dict[str, Any]] = []
     for context in execution.result.contexts:
         serialised.append(
             {
@@ -119,7 +120,7 @@ def _prepare_conversation(
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
     conversation_service: ConversationServiceDep,
-) -> tuple[UUID, int, List[AgentMessage]]:
+) -> tuple[UUID, int, list[AgentMessage]]:
     if payload.session_id:
         try:
             session_uuid = UUID(str(payload.session_id))
@@ -180,7 +181,7 @@ def _persist_agent_artifacts(
 ) -> None:
     assistant_text = _render_assistant_message(execution)
     contexts = execution.result.contexts
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "source": "agent_endpoint",
         "intent": execution.intent.model_dump(),
         "strategy": execution.result.strategy.value,
@@ -204,7 +205,7 @@ def _persist_agent_artifacts(
     )
 
     try:
-        retrieved_documents: List[UUID] = []
+        retrieved_documents: list[UUID] = []
         for context in contexts:
             if not context.document_id:
                 continue

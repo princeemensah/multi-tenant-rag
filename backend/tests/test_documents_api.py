@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, UTC
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -16,12 +16,12 @@ from app.models.tenant import Tenant, TenantUser
 
 class _StubDocumentService:
     def __init__(self) -> None:
-        self.upload_kwargs: Dict[str, Any] | None = None
-        self.process_calls: List[Dict[str, str]] = []
-        self._document: Optional[Document] = None
-        self.reprocess_candidates: List[Document] = []
-        self.reprocess_missing: List[UUID] = []
-        self.last_reprocess_query: Dict[str, Any] | None = None
+        self.upload_kwargs: dict[str, Any] | None = None
+        self.process_calls: list[dict[str, str]] = []
+        self._document: Document | None = None
+        self.reprocess_candidates: list[Document] = []
+        self.reprocess_missing: list[UUID] = []
+        self.last_reprocess_query: dict[str, Any] | None = None
 
     @property
     def document(self) -> Document:
@@ -33,9 +33,9 @@ class _StubDocumentService:
         db,
         tenant_id: str,
         file: UploadFile,
-        metadata: Optional[Dict[str, Any]] = None,
-        title: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        metadata: dict[str, Any] | None = None,
+        title: str | None = None,
+        tags: list[str] | None = None,
     ) -> Document:
         # Capture the inputs so the test can assert on merge behavior.
         captured_metadata = metadata or {}
@@ -85,10 +85,10 @@ class _StubDocumentService:
         db,
         tenant_id: str,
         *,
-        document_ids: Optional[List[str]] = None,
-        status_filter: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> tuple[List[Document], List[UUID]]:
+        document_ids: list[str] | None = None,
+        status_filter: str | None = None,
+        limit: int | None = None,
+    ) -> tuple[list[Document], list[UUID]]:
         self.last_reprocess_query = {
             "tenant_id": tenant_id,
             "document_ids": document_ids,

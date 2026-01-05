@@ -1,9 +1,9 @@
 """Incident management endpoints."""
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter
 
 from app.dependencies import (
@@ -21,9 +21,6 @@ from app.schemas.task import (
     IncidentUpdate,
 )
 
-import structlog
-
-
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -37,8 +34,8 @@ async def list_incidents(
     incident_service: IncidentServiceDep,
     skip: int = 0,
     limit: int = 20,
-    severity: Optional[IncidentSeverity] = None,
-    status: Optional[IncidentStatus] = None,
+    severity: IncidentSeverity | None = None,
+    status: IncidentStatus | None = None,
 ):
     items, total = incident_service.list_incidents(
         db=db,

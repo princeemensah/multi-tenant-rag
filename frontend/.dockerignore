@@ -1,0 +1,9 @@
+node_modules/
+.next/
+coverage/
+.eslintcache
+*.log
+.DS_Store
+.env.local
+.env*
+tsconfig.tsbuildinfo

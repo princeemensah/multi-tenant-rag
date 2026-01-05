@@ -1,6 +1,6 @@
 """Authentication service for tenant-scoped JWT flows."""
 from datetime import UTC, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -35,9 +35,9 @@ class AuthService:
         tenant_id: str,
         email: str,
         role: str,
-        permissions: Optional[List[str]] = None,
+        permissions: list[str] | None = None,
     ) -> str:
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "user_id": str(user_id),
             "tenant_id": str(tenant_id),
             "email": email,
@@ -50,7 +50,7 @@ class AuthService:
         }
         return jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
 
-    def decode_token(self, token: str) -> Dict[str, Any]:
+    def decode_token(self, token: str) -> dict[str, Any]:
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
         except JWTError as exc:
@@ -71,8 +71,8 @@ class AuthService:
         db: Session,
         email: str,
         password: str,
-        tenant_identifier: Optional[str] = None,
-    ) -> Optional[TenantUser]:
+        tenant_identifier: str | None = None,
+    ) -> TenantUser | None:
         query = db.query(TenantUser).filter(TenantUser.email == email)
 
         if tenant_identifier:

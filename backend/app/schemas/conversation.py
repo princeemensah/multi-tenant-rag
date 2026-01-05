@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -12,7 +11,7 @@ from pydantic.config import ConfigDict
 class ConversationSessionCreate(BaseModel):
     """Payload to create a new conversation session."""
 
-    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    title: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class ConversationSessionRename(BaseModel):
@@ -26,11 +25,11 @@ class ConversationSessionResponse(BaseModel):
 
     id: UUID
     tenant_id: UUID
-    created_by_id: Optional[UUID] = None
+    created_by_id: UUID | None = None
     title: str
     message_count: int
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -38,7 +37,7 @@ class ConversationSessionResponse(BaseModel):
 class ConversationSessionList(BaseModel):
     """Paginated sessions collection."""
 
-    sessions: List[ConversationSessionResponse]
+    sessions: list[ConversationSessionResponse]
     total: int
     page: int
     size: int
@@ -50,7 +49,7 @@ class ConversationMessageCreate(BaseModel):
 
     role: str = Field(..., min_length=1, max_length=32)
     content: str = Field(..., min_length=1)
-    metadata: Optional[Dict[str, object]] = None
+    metadata: dict[str, object] | None = None
 
 
 class ConversationMessageResponse(BaseModel):
@@ -59,10 +58,10 @@ class ConversationMessageResponse(BaseModel):
     id: UUID
     conversation_id: UUID
     tenant_id: UUID
-    author_id: Optional[UUID] = None
+    author_id: UUID | None = None
     role: str
     content: str
-    metadata: Dict[str, object] = Field(
+    metadata: dict[str, object] = Field(
         default_factory=dict,
         validation_alias="message_metadata",
         serialization_alias="metadata",
@@ -77,13 +76,13 @@ class ConversationMessageList(BaseModel):
     """Window of conversation messages."""
 
     session_id: UUID
-    messages: List[ConversationMessageResponse]
-    remaining: Optional[int] = None
-    next_before: Optional[int] = None
+    messages: list[ConversationMessageResponse]
+    remaining: int | None = None
+    next_before: int | None = None
 
 
 class ConversationContextResponse(BaseModel):
     """LLM-ready conversation context."""
 
     session_id: UUID
-    messages: List[Dict[str, str]]
+    messages: list[dict[str, str]]
