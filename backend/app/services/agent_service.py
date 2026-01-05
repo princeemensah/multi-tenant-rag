@@ -28,6 +28,7 @@ from app.services.llm_service import LLMService
 from app.services.prompt_template_service import PromptTemplateService
 from app.services.task_service import IncidentService, TaskService
 from app.services.vector_service import QdrantVectorService
+from app.services.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +43,14 @@ class AgentService:
         vector_service: Optional[QdrantVectorService] = None,
         task_service: Optional[TaskService] = None,
         incident_service: Optional[IncidentService] = None,
+        retrieval_service: Optional[RetrievalService] = None,
     ) -> None:
         self.llm_service = llm_service or LLMService()
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_service = vector_service or QdrantVectorService()
         self.task_service = task_service or TaskService()
         self.incident_service = incident_service or IncidentService()
+        self.retrieval_service = retrieval_service
         self.intent_classifier = IntentClassifier(self.llm_service)
 
     def _apply_conversation_context(
@@ -332,25 +335,35 @@ class AgentService:
         max_chunks: int,
         score_threshold: float,
     ) -> List[ContextSnippet]:
-        embedding = await self.embedding_service.embed_text(subquery)
-        if not isinstance(embedding, list):
-            raise RuntimeError("Embedding service returned unexpected format")
-
-        vector: List[float]
-        if embedding and isinstance(embedding[0], list):  # type: ignore[index]
-            vector = embedding[0]  # type: ignore[assignment]
+        if self.retrieval_service:
+            search_results = await self.retrieval_service.search_documents(
+                tenant_id=str(tenant_id),
+                query=subquery,
+                limit=max_chunks,
+                score_threshold=score_threshold,
+            )
+            items = search_results.items
         else:
-            vector = embedding  # type: ignore[assignment]
+            embedding = await self.embedding_service.embed_text(subquery)
+            if not isinstance(embedding, list):
+                raise RuntimeError("Embedding service returned unexpected format")
 
-        search_results = await self.vector_service.search_documents(
-            tenant_id=str(tenant_id),
-            query_embedding=vector,
-            limit=max_chunks,
-            score_threshold=score_threshold,
-        )
+            vector: List[float]
+            if embedding and isinstance(embedding[0], list):  # type: ignore[index]
+                vector = embedding[0]  # type: ignore[assignment]
+            else:
+                vector = embedding  # type: ignore[assignment]
+
+            search_results = await self.vector_service.search_documents(
+                tenant_id=str(tenant_id),
+                query_embedding=vector,
+                limit=max_chunks,
+                score_threshold=score_threshold,
+            )
+            items = search_results.items
 
         contexts: List[ContextSnippet] = []
-        for item in search_results.items:
+        for item in items:
             contexts.append(
                 ContextSnippet(
                     chunk_id=str(item.get("chunk_id")),

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,9 @@ export default function ConversationDetailPage() {
   const [messageContent, setMessageContent] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [assistantPreview, setAssistantPreview] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const streamController = useRef<AbortController | null>(null);
 
   const handleLoadMore = async () => {
     try {
@@ -77,26 +80,74 @@ export default function ConversationDetailPage() {
 
     try {
       setIsSending(true);
+      setIsStreaming(true);
       setSendError(null);
-      const { error: sendErr } = await apiClient.post(`/conversations/${sessionId}/messages`, {
-        body: { role: "user", content },
-        tenantId,
-      });
-
-      if (sendErr) {
-        throw new Error(sendErr.message);
-      }
-
+      setAssistantPreview("");
       setMessageContent("");
-      await mutateMessages();
-      await mutateSessions();
+      const controller = new AbortController();
+      streamController.current = controller;
+      let shouldRefresh = false;
+      try {
+        shouldRefresh = true;
+        await apiClient.stream(`/queries/rag/stream`, {
+          method: "POST",
+          tenantId,
+          signal: controller.signal,
+          headers: {
+            Accept: "text/event-stream",
+          },
+          body: {
+            query: content,
+            session_id: sessionId,
+            max_chunks: 6,
+            score_threshold: 0.35,
+            stream: true,
+          },
+          onMessage: (chunk) => {
+            setAssistantPreview((current) => `${current}${chunk}`);
+          },
+          onError: (error) => {
+            if (!(error instanceof DOMException && error.name === "AbortError")) {
+              setSendError(error.message || "Failed to stream response");
+            }
+          },
+        });
+      } catch (streamError) {
+        if (!(streamError instanceof DOMException && streamError.name === "AbortError")) {
+          const message = streamError instanceof Error ? streamError.message : "Failed to send message";
+          setSendError(message);
+          setMessageContent(content);
+        }
+      } finally {
+        streamController.current = null;
+        if (shouldRefresh) {
+          try {
+            await mutateMessages();
+            await mutateSessions();
+          } catch (refreshError) {
+            const message = refreshError instanceof Error ? refreshError.message : "Failed to refresh conversation";
+            setSendError((current) => current ?? message);
+          }
+        }
+        setAssistantPreview("");
+        setIsStreaming(false);
+        setIsSending(false);
+      }
     } catch (mutationError) {
       const message = mutationError instanceof Error ? mutationError.message : "Failed to send message";
       setSendError(message);
-    } finally {
+      setMessageContent(content);
+      streamController.current = null;
+      setIsStreaming(false);
       setIsSending(false);
     }
   };
+  useEffect(() => () => {
+    if (streamController.current) {
+      streamController.current.abort();
+      streamController.current = null;
+    }
+  }, []);
 
   const handleRename = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -237,17 +288,40 @@ export default function ConversationDetailPage() {
                     </li>
                   ))
                 ) : messagesData?.messages.length ? (
-                  messagesData.messages.map((message) => (
-                    <li key={message.id} className="border-b p-4">
-                      <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
-                        <span>{message.role}</span>
-                        <span>{new Date(message.created_at).toLocaleString()}</span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
-                        {message.content}
-                      </p>
-                    </li>
-                  ))
+                  <>
+                    {messagesData.messages.map((message) => (
+                      <li key={message.id} className="border-b p-4">
+                        <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
+                          <span>{message.role}</span>
+                          <span>{new Date(message.created_at).toLocaleString()}</span>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                          {message.content}
+                        </p>
+                      </li>
+                    ))}
+                    {assistantPreview ? (
+                      <li className="border-b bg-muted/30 p-4">
+                        <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
+                          <span>assistant</span>
+                          <span>Streaming…</span>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                          {assistantPreview}
+                        </p>
+                      </li>
+                    ) : null}
+                  </>
+                ) : assistantPreview ? (
+                  <li className="border-b bg-muted/30 p-4">
+                    <div className="flex items-center justify-between text-xs uppercase text-muted-foreground">
+                      <span>assistant</span>
+                      <span>Streaming…</span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                      {assistantPreview}
+                    </p>
+                  </li>
                 ) : (
                   <li className="p-6 text-sm text-muted-foreground">No messages available yet.</li>
                 )}
@@ -283,7 +357,7 @@ export default function ConversationDetailPage() {
               Messages are sent as the current user within the selected tenant context.
             </p>
             <Button type="submit" disabled={isSending || !tenantId}>
-              {isSending ? "Sending…" : "Send message"}
+              {isStreaming ? "Streaming…" : isSending ? "Sending…" : "Send message"}
             </Button>
           </div>
         </form>

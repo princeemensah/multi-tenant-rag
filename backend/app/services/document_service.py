@@ -37,8 +37,6 @@ class DocumentService:
         self.upload_dir = Path(settings.upload_dir)
         self.max_file_size = settings.max_file_size_mb * 1024 * 1024
         self.allowed_types = {ext.lower() for ext in settings.allowed_file_types}
-        self.chunk_max_chars = settings.chunk_max_chars
-        self.chunk_overlap_chars = settings.chunk_overlap_chars
         self.embedding_service = EmbeddingService()
         self.vector_service = QdrantVectorService()
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -52,11 +50,9 @@ class DocumentService:
         title: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> Document:
-        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
-
         self._validate_file(file)
         file_ext = self._infer_extension(file.filename)
-        stored_name = f"{tenant_uuid}_{uuid.uuid4()}.{file_ext}"
+        stored_name = f"{tenant_id}_{uuid.uuid4()}.{file_ext}"
         file_path = self.upload_dir / stored_name
 
         raw = await file.read()
@@ -70,7 +66,7 @@ class DocumentService:
             raise HTTPException(status_code=500, detail="Failed to store uploaded file") from exc
 
         document = Document(
-            tenant_id=tenant_uuid,
+            tenant_id=tenant_id,
             filename=stored_name,
             original_filename=file.filename or stored_name,
             content_type=file.content_type or self._guess_mime(file_ext),
@@ -85,7 +81,7 @@ class DocumentService:
         db.add(document)
         db.commit()
         db.refresh(document)
-        logger.info("Document uploaded", extra={"document_id": str(document.id), "tenant": str(tenant_uuid)})
+        logger.info("Document uploaded", extra={"document_id": str(document.id), "tenant": tenant_id})
         return document
 
     def _validate_file(self, file: UploadFile) -> None:
@@ -108,8 +104,7 @@ class DocumentService:
         return mapping.get(extension, "application/octet-stream")
 
     async def process_document(self, db: Session, document_id: str, tenant_id: str) -> bool:
-        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
-        document = self.get_document(db, document_id, tenant_uuid)
+        document = self.get_document(db, document_id, tenant_id)
         if not document:
             logger.error("Document not found", extra={"document_id": document_id, "tenant": tenant_id})
             return False
@@ -133,14 +128,10 @@ class DocumentService:
 
         # Remove previous artefacts if reprocessing
         db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
-        await self.vector_service.delete_document(str(tenant_uuid), str(document.id))
+        await self.vector_service.delete_document(tenant_id, str(document.id))
         db.flush()
 
-        chunks = self.embedding_service.chunk_text_for_embedding(
-            text,
-            max_chunk_size=self.chunk_max_chars,
-            overlap_size=self.chunk_overlap_chars,
-        )
+        chunks = self.embedding_service.chunk_text_for_embedding(text)
         if not chunks:
             document.status = "failed"
             db.commit()
@@ -220,18 +211,17 @@ class DocumentService:
         document.processed_chunks = len(chunk_records)
         document.collection_name = self.vector_service.default_collection
         document.embedding_model = self.embedding_service.model_name
-        document.processed_at = datetime.now(UTC)
+        document.processed_at = datetime.utcnow()
         db.commit()
         logger.info("Document processed", extra={"document_id": str(document.id), "chunks": len(chunk_records)})
         return True
 
     async def delete_document(self, db: Session, document_id: str, tenant_id: str) -> bool:
-        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
-        document = self.get_document(db, document_id, tenant_uuid)
+        document = self.get_document(db, document_id, tenant_id)
         if not document:
             return False
 
-        await self.vector_service.delete_document(str(tenant_uuid), str(document.id))
+        await self.vector_service.delete_document(tenant_id, str(document.id))
         db.delete(document)
         db.commit()
 
@@ -245,14 +235,9 @@ class DocumentService:
         return True
 
     def get_document(self, db: Session, document_id: str, tenant_id: Optional[str] = None) -> Optional[Document]:
-        document_uuid = self._coerce_uuid(document_id)
-        if document_uuid is None:
-            return None
-
-        query = db.query(Document).filter(Document.id == document_uuid)
-        tenant_uuid = self._coerce_uuid(tenant_id)
-        if tenant_uuid:
-            query = query.filter(Document.tenant_id == tenant_uuid)
+        query = db.query(Document).filter(Document.id == document_id)
+        if tenant_id:
+            query = query.filter(Document.tenant_id == tenant_id)
         return query.first()
 
     def list_documents(
@@ -263,64 +248,10 @@ class DocumentService:
         limit: int = 100,
         status_filter: Optional[str] = None,
     ) -> List[Document]:
-        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
-        query = db.query(Document).filter(Document.tenant_id == tenant_uuid)
+        query = db.query(Document).filter(Document.tenant_id == tenant_id)
         if status_filter:
             query = query.filter(Document.status == status_filter)
         return query.offset(skip).limit(limit).all()
-
-    def select_documents_for_reprocessing(
-        self,
-        db: Session,
-        tenant_id: str,
-        *,
-        document_ids: Optional[List[str]] = None,
-        status_filter: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> tuple[List[Document], List[uuid.UUID]]:
-        """Return candidate documents plus any missing identifiers.
-
-        The returned list respects the order of ``document_ids`` when provided so
-        operators can predict processing order. ``missing`` contains any
-        requested IDs that do not exist for the tenant, allowing the caller to
-        surface actionable feedback without failing the entire request.
-        """
-
-        tenant_uuid = self._require_uuid(tenant_id, field="tenant_id")
-        query = db.query(Document).filter(Document.tenant_id == tenant_uuid)
-
-        ordered_ids: List[uuid.UUID] = []
-        missing_ids: List[uuid.UUID] = []
-
-        if document_ids:
-            seen: set[uuid.UUID] = set()
-            for raw_id in document_ids:
-                doc_uuid = self._coerce_uuid(raw_id)
-                if doc_uuid is None:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document_id provided")
-                if doc_uuid not in seen:
-                    ordered_ids.append(doc_uuid)
-                    seen.add(doc_uuid)
-
-            if ordered_ids:
-                query = query.filter(Document.id.in_(ordered_ids))
-
-        if status_filter:
-            query = query.filter(Document.status == status_filter)
-
-        query = query.order_by(Document.uploaded_at.asc())
-
-        if limit and limit > 0 and not ordered_ids:
-            query = query.limit(limit)
-
-        documents: List[Document] = query.all()
-
-        if ordered_ids:
-            found_map = {doc.id: doc for doc in documents}
-            documents = [found_map[doc_id] for doc_id in ordered_ids if doc_id in found_map]
-            missing_ids = [doc_id for doc_id in ordered_ids if doc_id not in found_map]
-
-        return documents, missing_ids
 
     def update_document_status(self, db: Session, document_id: str, status_value: str) -> Document:
         document = db.query(Document).filter(Document.id == document_id).first()
@@ -334,22 +265,6 @@ class DocumentService:
     async def chunk_and_embed(self, text: str) -> List[Dict[str, Any]]:
         chunks = self.embedding_service.chunk_text_for_embedding(text)
         return await self.embedding_service.embed_document_chunks(chunks)
-
-    def _coerce_uuid(self, value: Optional[str]) -> Optional[uuid.UUID]:
-        if value is None:
-            return None
-        if isinstance(value, uuid.UUID):
-            return value
-        try:
-            return uuid.UUID(str(value))
-        except (ValueError, TypeError):
-            return None
-
-    def _require_uuid(self, value: str, *, field: str) -> uuid.UUID:
-        result = self._coerce_uuid(value)
-        if result is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}")
-        return result
 
     def _normalize_created_at(self, value: Any) -> tuple[str, float]:
         if isinstance(value, datetime):
