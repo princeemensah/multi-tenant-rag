@@ -1,0 +1,11 @@
+{
+  "queries": [
+    {
+      "tenant_id": "TENANT-ID-HERE",
+      "query": "How do I reset my password?",
+      "expected_sources": ["support_faq.md"],
+      "tags": ["faq"],
+      "document_ids": []
+    }
+  ]
+}

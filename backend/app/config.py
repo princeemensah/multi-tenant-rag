@@ -3,7 +3,7 @@ from functools import lru_cache
 from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -46,12 +46,25 @@ class Settings(BaseSettings):
     chunk_max_chars: int = Field(default=512, env="CHUNK_MAX_CHARS")
     chunk_overlap_chars: int = Field(default=50, env="CHUNK_OVERLAP_CHARS")
 
+    cache_enabled: bool = Field(default=True, env="CACHE_ENABLED")
+    cache_namespace: str = Field(default="mt_rag", env="CACHE_NAMESPACE")
+    cache_ttl_seconds: int = Field(default=300, env="CACHE_TTL_SECONDS")
+
+    reranker_enabled: bool = Field(default=False, env="RERANKER_ENABLED")
+    reranker_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        env="RERANKER_MODEL",
+    )
+    reranker_max_candidates: int = Field(default=25, env="RERANKER_MAX_CANDIDATES")
+
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     log_format: str = Field(default="json", env="LOG_FORMAT")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="allow",
+    )
 
     @field_validator("allowed_hosts", mode="before")
     @classmethod

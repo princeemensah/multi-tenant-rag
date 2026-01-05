@@ -1,13 +1,42 @@
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/lib/api-client";
+import { env } from "@/lib/env";
 
 interface HealthResponse {
   status: string;
   [key: string]: unknown;
 }
 
-async function fetchHealth() {
-  return apiClient.get<HealthResponse>("/health");
+interface HealthFetchResult {
+  data: HealthResponse | null;
+  error: { message: string; details?: unknown } | null;
+}
+
+async function fetchHealth(): Promise<HealthFetchResult> {
+  const healthUrl = new URL("/health", env.NEXT_PUBLIC_BACKEND_URL).toString();
+
+  try {
+    const response = await fetch(healthUrl, { cache: "no-store" });
+
+    if (!response.ok) {
+      return {
+        data: null,
+        error: {
+          message: `Request failed with status ${response.status}`,
+          details: await response.json().catch(() => null),
+        },
+      };
+    }
+
+    const payload = (await response.json()) as HealthResponse;
+    return { data: payload, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: {
+        message: error instanceof Error ? error.message : "Unexpected error",
+      },
+    };
+  }
 }
 
 export default async function Home() {

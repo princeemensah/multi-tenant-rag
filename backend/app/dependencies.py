@@ -1,4 +1,5 @@
 """FastAPI dependency helpers."""
+from functools import lru_cache
 from typing import Optional, Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -9,10 +10,13 @@ from app.database import get_db
 from app.models.tenant import Tenant, TenantUser
 from app.services.auth_service import AuthService
 from app.services.agent_service import AgentService
+from app.services.cache_service import CacheService
 from app.services.conversation_service import ConversationService
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
 from app.services.llm_service import LLMService
+from app.services.rerank_service import RerankService
+from app.services.retrieval_service import RetrievalService
 from app.services.task_service import IncidentService, TaskService
 from app.services.tenant_service import TenantService
 from app.services.vector_service import QdrantVectorService
@@ -20,12 +24,22 @@ from app.services.vector_service import QdrantVectorService
 security = HTTPBearer(auto_error=False)
 
 
-def get_auth_service() -> AuthService:
+@lru_cache()
+def _cached_auth_service() -> AuthService:
     return AuthService()
 
 
-def get_tenant_service() -> TenantService:
+def get_auth_service() -> AuthService:
+    return _cached_auth_service()
+
+
+@lru_cache()
+def _cached_tenant_service() -> TenantService:
     return TenantService()
+
+
+def get_tenant_service() -> TenantService:
+    return _cached_tenant_service()
 
 
 def get_document_service() -> DocumentService:
@@ -36,8 +50,13 @@ def get_vector_service() -> QdrantVectorService:
     return QdrantVectorService()
 
 
-def get_llm_service() -> LLMService:
+@lru_cache()
+def _cached_llm_service() -> LLMService:
     return LLMService()
+
+
+def get_llm_service() -> LLMService:
+    return _cached_llm_service()
 
 
 def get_embedding_service() -> EmbeddingService:
@@ -52,8 +71,54 @@ def get_incident_service() -> IncidentService:
     return IncidentService()
 
 
-def get_agent_service() -> AgentService:
-    return AgentService()
+@lru_cache()
+def _cached_cache_service() -> CacheService:
+    return CacheService()
+
+
+def get_cache_service() -> CacheService:
+    return _cached_cache_service()
+
+
+@lru_cache()
+def _cached_rerank_service() -> RerankService:
+    return RerankService()
+
+
+def get_rerank_service() -> RerankService:
+    return _cached_rerank_service()
+
+
+def get_retrieval_service(
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+    vector_service: QdrantVectorService = Depends(get_vector_service),
+    cache_service: CacheService = Depends(get_cache_service),
+    rerank_service: RerankService = Depends(get_rerank_service),
+) -> RetrievalService:
+    return RetrievalService(
+        embedding_service=embedding_service,
+        vector_service=vector_service,
+        cache_service=cache_service,
+        rerank_service=rerank_service,
+    )
+
+
+def get_agent_service(
+    llm_service: LLMService = Depends(get_llm_service),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+    vector_service: QdrantVectorService = Depends(get_vector_service),
+    task_service: TaskService = Depends(get_task_service),
+    incident_service: IncidentService = Depends(get_incident_service),
+    retrieval_service: RetrievalService = Depends(get_retrieval_service),
+) -> AgentService:
+    return AgentService(
+        llm_service=llm_service,
+        embedding_service=embedding_service,
+        vector_service=vector_service,
+        task_service=task_service,
+        incident_service=incident_service,
+        retrieval_service=retrieval_service,
+    )
 
 
 def get_conversation_service() -> ConversationService:
@@ -175,6 +240,9 @@ LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
 EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 IncidentServiceDep = Annotated[IncidentService, Depends(get_incident_service)]
+CacheServiceDep = Annotated[CacheService, Depends(get_cache_service)]
+RerankServiceDep = Annotated[RerankService, Depends(get_rerank_service)]
+RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
 AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
 

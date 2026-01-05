@@ -32,6 +32,21 @@ class VectorSearchResults:
     next_offset: Optional[int] = None
     has_more: bool = False
 
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "items": self.items,
+            "next_offset": self.next_offset,
+            "has_more": self.has_more,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Dict[str, Any]) -> "VectorSearchResults":
+        return cls(
+            items=list(payload.get("items", [])),
+            next_offset=payload.get("next_offset"),
+            has_more=bool(payload.get("has_more", False)),
+        )
+
 
 class QdrantVectorService:
     """Coordinates vector store interactions with strict tenant scoping."""
@@ -40,18 +55,30 @@ class QdrantVectorService:
         self.default_collection = "multi_tenant_documents"
         self.embedding_dimension = settings.embedding_dimension
 
-        common_kwargs = {
-            "host": settings.qdrant_host,
-            "port": settings.qdrant_port,
-            "api_key": settings.qdrant_api_key,
-            "timeout": 30.0,
-            "prefer_grpc": False,
-            "https": False,
-            "check_compatibility": False,
-        }
+        common_kwargs = self._build_client_kwargs()
 
         self.client = QdrantClient(**common_kwargs)
         self.async_client = AsyncQdrantClient(**common_kwargs)
+
+    def _build_client_kwargs(self) -> Dict[str, Any]:
+        """Construct client keyword arguments supporting host or full URL values."""
+
+        host_value = (settings.qdrant_host or "").strip()
+        kwargs: Dict[str, Any] = {
+            "api_key": settings.qdrant_api_key,
+            "timeout": 30.0,
+            "prefer_grpc": False,
+            "check_compatibility": False,
+        }
+
+        if host_value.startswith("http://") or host_value.startswith("https://"):
+            kwargs["url"] = host_value.rstrip("/")
+        else:
+            kwargs["host"] = host_value or "localhost"
+            kwargs["port"] = settings.qdrant_port
+            kwargs["https"] = False
+
+        return kwargs
 
     async def init_collection(self, collection_name: Optional[str] = None) -> bool:
         collection = collection_name or self.default_collection

@@ -1,6 +1,7 @@
 """Authentication service for tenant-scoped JWT flows."""
 from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
@@ -75,12 +76,16 @@ class AuthService:
         query = db.query(TenantUser).filter(TenantUser.email == email)
 
         if tenant_identifier:
-            query = query.join(Tenant).filter(
-                and_(
-                    Tenant.is_active.is_(True),
-                    or_(Tenant.subdomain == tenant_identifier, Tenant.id == tenant_identifier),
-                )
-            )
+            query = query.join(Tenant).filter(Tenant.is_active.is_(True))
+
+            tenant_filters = [Tenant.subdomain == tenant_identifier]
+            try:
+                tenant_filters.append(Tenant.id == UUID(tenant_identifier))
+            except (TypeError, ValueError):
+                # Provided identifier is not a UUID; ignore the ID comparison.
+                pass
+
+            query = query.filter(or_(*tenant_filters))
 
         user = query.first()
         if not user or not self.verify_password(password, user.hashed_password):

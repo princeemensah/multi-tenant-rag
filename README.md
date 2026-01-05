@@ -40,6 +40,60 @@ Populate a `.env` file (or export environment variables) with the following chun
 
 The backend reads these values via Settings in [backend/app/config.py](backend/app/config.py), allowing you to widen or shrink chunk sizing without code changes.
 
+### Retrieval Tuning
+
+- `CACHE_ENABLED`, `CACHE_NAMESPACE`, `CACHE_TTL_SECONDS` control the Redis-backed retrieval cache. Provide `REDIS_URL` and leave caching enabled to avoid recomputing embeddings for repeated tenant queries. Set `CACHE_ENABLED=false` locally when Redis is unavailable.
+- `RERANKER_ENABLED`, `RERANKER_MODEL`, `RERANKER_MAX_CANDIDATES` enable the optional cross-encoder step in [backend/app/services/rerank_service.py](backend/app/services/rerank_service.py). When enabled, ensure the sentence-transformers package can download the configured model.
+
+### Retrieval Evaluation
+
+Prepare a JSON dataset (see [seed_data/eval_queries.sample.json](seed_data/eval_queries.sample.json) for structure) and run the evaluator to measure hit rate, recall, and MRR:
+
+```
+python -m app.scripts.evaluate_retrieval --dataset seed_data/eval_queries.sample.json
+```
+
+Add `--disable-cache` or `--disable-reranker` to compare retrieval variants. Verbose output surfaces per-query matches for easier troubleshooting.
+
+## Running Locally
+
+1. **Infrastructure**
+	- Start Redis (`brew services start redis` or `docker run -p 6379:6379 redis:7`).
+	- Launch Qdrant (`docker run -p 6333:6333 qdrant/qdrant:latest`).
+	- Provide a database URL; SQLite is fine for local work (`DATABASE_URL=sqlite:///./data/app.db`).
+2. **Backend**
+	- Create a virtualenv, install deps, and populate `.env` inside `backend/` with at least:
+
+```
+DATABASE_URL=sqlite:///./data/app.db
+REDIS_URL=redis://localhost:6379/0
+JWT_SECRET_KEY=dev-secret-change-me
+APP_NAME=Multi-Tenant RAG System
+DEBUG=1
+```
+
+	- Run the API with:
+
+```
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+3. **Frontend**
+	- Create `frontend/.env.local` and set `NEXT_PUBLIC_BACKEND_URL` to the backend origin (default `http://localhost:8000`).
+	- Install and start Next.js:
+
+```
+cd frontend
+pnpm install
+pnpm dev
+```
+
+4. **Smoke Test**
+	- Log in via the web UI, pick a tenant, open a conversation, and send a prompt. You should see a live assistant response while the backend caches and stores the exchange. Use `seed_data/corpus.json` with `python -m app.scripts.seed_data --reset` if you need demo tenants/documents.
+
 ## Operations
 
 - Reprocess stored documents by calling POST /api/v1/documents/reprocess with the payload defined in [backend/app/schemas/document.py](backend/app/schemas/document.py#L120-L151). The endpoint accepts explicit document_ids or filtering parameters and queues background processing for matching records.

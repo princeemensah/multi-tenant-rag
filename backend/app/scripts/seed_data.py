@@ -340,7 +340,6 @@ async def seed_documents(
         upload = UploadFile(
             filename=item["filename"],
             file=buffer,
-            content_type="text/markdown" if item["filename"].endswith(".md") else "text/plain",
         )
 
         try:

@@ -1,6 +1,7 @@
 """Authentication schema placeholders."""
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
@@ -22,7 +23,7 @@ class UserLogin(BaseModel):
 
 
 class UserResponse(UserBase):
-    id: str
+    id: UUID | str
     is_active: bool = True
     created_at: Optional[datetime] = None
 
@@ -64,7 +65,7 @@ class TenantUpdate(BaseModel):
 
 
 class TenantResponse(TenantCreate):
-    id: str
+    id: UUID | str
     is_active: bool = True
     created_at: Optional[datetime] = None
 
