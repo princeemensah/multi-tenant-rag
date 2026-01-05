@@ -20,6 +20,7 @@ from app.dependencies import (
     DatabaseDep,
     EmbeddingServiceDep,
     LLMServiceDep,
+    RetrievalServiceDep,
     VectorServiceDep,
 )
 from app.models.query import Query, QueryResponse as QueryResponseModel
@@ -100,22 +101,35 @@ async def debug_search_test(
     current_tenant: CurrentTenantDep = None,
     vector_service: VectorServiceDep = None,
     embedding_service: EmbeddingServiceDep = None,
+    retrieval_service: RetrievalServiceDep = None,
 ):
     try:
-        query_embedding = await embedding_service.embed_text(query)  # type: ignore[union-attr]
-        results = await vector_service.search_documents(  # type: ignore[union-attr]
-            tenant_id=str(current_tenant.id),
-            query_embedding=query_embedding,
-            limit=max(1, max_chunks),
-            score_threshold=score_threshold,
-        )
+        query_embedding = []
+        if embedding_service is not None:  # type: ignore[truthy-function]
+            query_embedding = await embedding_service.embed_text(query)  # type: ignore[union-attr]
+
+        if retrieval_service is not None:
+            results = await retrieval_service.search_documents(
+                tenant_id=str(current_tenant.id),
+                query=query,
+                limit=max(1, max_chunks),
+                score_threshold=score_threshold,
+                use_cache=False,
+            )
+        else:
+            results = await vector_service.search_documents(  # type: ignore[union-attr]
+                tenant_id=str(current_tenant.id),
+                query_embedding=query_embedding,
+                limit=max(1, max_chunks),
+                score_threshold=score_threshold,
+            )
 
         scores = [item.get("score", 0.0) for item in results.items]
         top_results = results.items[: min(len(results.items), 3)]
         return {
             "query": query,
             "tenant_id": str(current_tenant.id),
-            "embedding_dimension": len(query_embedding),
+            "embedding_dimension": len(query_embedding) if query_embedding else None,
             "score_threshold": score_threshold,
             "results_found": len(results.items),
             "scores": scores,
@@ -193,9 +207,8 @@ async def generate_rag_response(
     current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
-    vector_service: VectorServiceDep,
     llm_service: LLMServiceDep,
-    embedding_service: EmbeddingServiceDep,
+    retrieval_service: RetrievalServiceDep,
     conversation_service: ConversationServiceDep,
 ):
     start = time.perf_counter()
@@ -227,17 +240,15 @@ async def generate_rag_response(
         llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
         conversation_turn = session.message_count // 2 + 1
 
-        query_embedding = await embedding_service.embed_text(rag_request.query)
-
         filter_conditions: Dict[str, object] = {}
         if rag_request.document_ids:
             filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
         if rag_request.tags:
             filter_conditions["tags"] = rag_request.tags
 
-        search_results = await vector_service.search_documents(
+        search_results = await retrieval_service.search_documents(
             tenant_id=str(current_tenant.id),
-            query_embedding=query_embedding,
+            query=rag_request.query,
             limit=rag_request.max_chunks,
             score_threshold=rag_request.score_threshold,
             filter_conditions=filter_conditions or None,
@@ -380,7 +391,7 @@ async def generate_rag_response(
         return rag_payload
     except Exception as exc:
         elapsed_ms = (time.perf_counter() - start) * 1000.0
-        logger.error("RAG query failed", extra={"error": str(exc)})
+        logger.exception("RAG query failed", extra={"error": str(exc)})
         try:
             await _record_failed_query(db, current_tenant.id, current_user.id, rag_request, exc, elapsed_ms)
         except Exception:  # pragma: no cover - defensive
@@ -394,9 +405,8 @@ async def generate_rag_response_stream(
     current_user: CurrentUserDep,
     current_tenant: CurrentTenantDep,
     db: DatabaseDep,
-    vector_service: VectorServiceDep,
     llm_service: LLMServiceDep,
-    embedding_service: EmbeddingServiceDep,
+    retrieval_service: RetrievalServiceDep,
     conversation_service: ConversationServiceDep,
 ):
     try:
@@ -427,16 +437,15 @@ async def generate_rag_response_stream(
         conversation_turn = session.message_count // 2 + 1
         llm_conversation_history = [*prior_messages, {"role": "user", "content": rag_request.query}]
 
-        query_embedding = await embedding_service.embed_text(rag_request.query)
         filter_conditions: Dict[str, object] = {}
         if rag_request.document_ids:
             filter_conditions["document_id"] = [str(doc_id) for doc_id in rag_request.document_ids]
         if rag_request.tags:
             filter_conditions["tags"] = rag_request.tags
 
-        search_results = await vector_service.search_documents(
+        search_results = await retrieval_service.search_documents(
             tenant_id=str(current_tenant.id),
-            query_embedding=query_embedding,
+            query=rag_request.query,
             limit=rag_request.max_chunks,
             score_threshold=rag_request.score_threshold,
             filter_conditions=filter_conditions or None,

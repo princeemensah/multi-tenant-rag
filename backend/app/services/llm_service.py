@@ -369,7 +369,7 @@ class LLMService:
         selected_model = self._resolve_model(llm_provider, model)
 
         if stream:
-            return llm_provider.generate_stream(
+            return await llm_provider.generate_stream(
                 messages,
                 model=selected_model,
                 temperature=temperature,
